@@ -1,0 +1,33 @@
+:root {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  color: #1f2937;
+  background-color: #f5f7fb;
+  --navy: #1a2a52;
+  --navy-dark: #0f1a3a;
+  --grey-100: #f5f7fb;
+  --grey-200: #e5e7eb;
+  --grey-300: #cbd5f0;
+  --grey-600: #4b5563;
+  --white: #ffffff;
+  --accent: #2b5fbf;
+  --success: #2f855a;
+  --warning: #c05621;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--grey-100);
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.page-loading {
+  padding: 2rem;
+}
