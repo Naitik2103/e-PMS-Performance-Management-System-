@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
+import { Plus, Trash2 } from "lucide-react";
 
 const Tracking = () => {
   const { user } = useAuth();
@@ -16,12 +17,12 @@ const Tracking = () => {
       if (user?.role === "Employee") {
         const [trackingRes, goalsRes] = await Promise.all([
           apiClient.get("/tracking/my"),
-          apiClient.get("/goals/my")
+          apiClient.get("/goals/my"),
         ]);
         setTracking(trackingRes.data);
         setGoals(goalsRes.data);
         if (!form.goalId && goalsRes.data.length) {
-          setForm((prev) => ({ ...prev, goalId: goalsRes.data[0]._id }));
+          setForm((prev) => ({ ...prev, goalId: goalsRes.data[0].id }));
         }
       }
       if (user?.role === "ReportingOfficer") {
@@ -34,15 +35,13 @@ const Tracking = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      loadData();
-    }
+    if (user) loadData();
   }, [user]);
 
   const addEntry = () => {
     setForm((prev) => ({
       ...prev,
-      progressEntries: [...prev.progressEntries, { kpaTitle: "", progress: "" }]
+      progressEntries: [...prev.progressEntries, { kpaTitle: "", progress: "" }],
     }));
   };
 
@@ -90,9 +89,10 @@ const Tracking = () => {
               <div>
                 <label>Goal</label>
                 <select value={form.goalId} onChange={(e) => setForm({ ...form, goalId: e.target.value })}>
+                  <option value="">Select a goal...</option>
                   {goals.map((goal) => (
-                    <option key={goal._id} value={goal._id}>
-                      {goal.year} - {goal.status}
+                    <option key={goal.id} value={goal.id}>
+                      {goal.year} — {goal.status}
                     </option>
                   ))}
                 </select>
@@ -108,34 +108,42 @@ const Tracking = () => {
               <div>
                 <label>Period</label>
                 <select value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })}>
-                  <option value="H1">H1</option>
-                  <option value="H2">H2</option>
+                  <option value="H1">H1 (Jan – Jun)</option>
+                  <option value="H2">H2 (Jul – Dec)</option>
                 </select>
               </div>
             </div>
 
+            <div className="section-sub-label">Progress Entries</div>
             <div className="kpa-list">
+              {form.progressEntries.length === 0 && (
+                <div className="empty-hint">Click "Add Progress Entry" to record your progress per KPA.</div>
+              )}
               {form.progressEntries.map((entry, index) => (
                 <div className="kpa-item" key={`entry-${index}`}>
+                  <div className="kpa-item-header">
+                    <span className="kpa-item-num">Entry {index + 1}</span>
+                    <button className="btn-icon-danger" type="button" onClick={() => removeEntry(index)} title="Remove">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                   <div className="form-row">
                     <div>
                       <label>KPA Title</label>
-                      <input value={entry.kpaTitle} onChange={(e) => updateEntry(index, "kpaTitle", e.target.value)} />
+                      <input value={entry.kpaTitle} onChange={(e) => updateEntry(index, "kpaTitle", e.target.value)} placeholder="KPA name" />
                     </div>
                     <div>
-                      <label>Progress</label>
-                      <input value={entry.progress} onChange={(e) => updateEntry(index, "progress", e.target.value)} />
+                      <label>Progress Update</label>
+                      <input value={entry.progress} onChange={(e) => updateEntry(index, "progress", e.target.value)} placeholder="Describe your progress..." />
                     </div>
                   </div>
-                  <button className="btn ghost" type="button" onClick={() => removeEntry(index)}>
-                    Remove
-                  </button>
                 </div>
               ))}
             </div>
+
             <div className="action-row">
               <button className="btn secondary" type="button" onClick={addEntry}>
-                Add Progress Entry
+                <Plus size={15} /> Add Progress Entry
               </button>
               <button className="btn" type="button" onClick={handleSave}>
                 Save Progress
@@ -149,6 +157,7 @@ const Tracking = () => {
       <div className="card">
         <div className="card-header">
           <h2>Tracking Records</h2>
+          <span className="muted">{tracking.length} record{tracking.length !== 1 ? "s" : ""}</span>
         </div>
         <table className="table">
           <thead>
@@ -156,28 +165,31 @@ const Tracking = () => {
               <th>Employee</th>
               <th>Year</th>
               <th>Period</th>
-              <th>Status</th>
-              <th>Remarks</th>
+              <th>Entries</th>
+              <th>RO Remarks</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
+            {tracking.length === 0 && (
+              <tr><td colSpan={6} className="table-empty">No tracking records found.</td></tr>
+            )}
             {tracking.map((record) => (
-              <tr key={record._id}>
+              <tr key={record.id}>
                 <td>{record.employee?.name || "Self"}</td>
                 <td>{record.year}</td>
-                <td>{record.period}</td>
-                <td><StatusBadge status={record.status} /></td>
-                <td>{record.roRemarks || "-"}</td>
+                <td><span className="period-chip">{record.period}</span></td>
+                <td>{record.progressEntries?.length || 0} entries</td>
+                <td className="remarks-cell">{record.roRemarks || <span className="muted">—</span>}</td>
                 <td>
                   {user?.role === "ReportingOfficer" && (
                     <div className="inline-form-short">
                       <input
-                        placeholder="Add remarks"
-                        value={remarks[record._id] || ""}
-                        onChange={(e) => setRemarks((prev) => ({ ...prev, [record._id]: e.target.value }))}
+                        placeholder="Add remarks..."
+                        value={remarks[record.id] || ""}
+                        onChange={(e) => setRemarks((prev) => ({ ...prev, [record.id]: e.target.value }))}
                       />
-                      <button className="btn" type="button" onClick={() => submitRemarks(record._id)}>
+                      <button className="btn" type="button" onClick={() => submitRemarks(record.id)}>
                         Submit
                       </button>
                     </div>

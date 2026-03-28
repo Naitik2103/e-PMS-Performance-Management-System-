@@ -1,9 +1,9 @@
-const User = require("../models/User");
+const { User } = require("../models");
 
 const createUser = async (req, res, next) => {
   try {
     const { name, email, password, role, department, reportingTo } = req.body;
-    const existing = await User.findOne({ email: email.toLowerCase() });
+    const existing = await User.findOne({ where: { email: email.toLowerCase() } });
     if (existing) {
       res.status(409);
       return next(new Error("User with this email already exists"));
@@ -14,13 +14,13 @@ const createUser = async (req, res, next) => {
       name,
       email: email.toLowerCase(),
       passwordHash,
-      role,
+      role: role || "Employee",
       department,
       reportingTo: reportingTo || null
     });
 
     return res.status(201).json({
-      id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
@@ -39,9 +39,11 @@ const listUsers = async (req, res, next) => {
     if (role) filter.role = role;
     if (department) filter.department = department;
 
-    const users = await User.find(filter)
-      .select("-passwordHash")
-      .sort({ createdAt: -1 });
+    const users = await User.findAll({
+      where: filter,
+      attributes: { exclude: ["passwordHash"] },
+      order: [["createdAt", "DESC"]]
+    });
     return res.json(users);
   } catch (error) {
     return next(error);
@@ -59,16 +61,15 @@ const updateUser = async (req, res, next) => {
       delete updates.password;
     }
 
-    const user = await User.findByIdAndUpdate(id, updates, {
-      new: true,
-      runValidators: true
-    }).select("-passwordHash");
-
+    const user = await User.findByPk(id);
     if (!user) {
       res.status(404);
       return next(new Error("User not found"));
     }
-    return res.json(user);
+    await user.update(updates);
+    const sanitized = user.toJSON();
+    delete sanitized.passwordHash;
+    return res.json(sanitized);
   } catch (error) {
     return next(error);
   }
@@ -76,12 +77,13 @@ const updateUser = async (req, res, next) => {
 
 const hierarchy = async (req, res, next) => {
   try {
-    const users = await User.find({}).select("-passwordHash");
-    const byId = new Map(users.map((user) => [user._id.toString(), user]));
+    const users = await User.findAll({ attributes: { exclude: ["passwordHash"] } });
+    const plainUsers = users.map((user) => user.toJSON());
+    const byId = new Map(plainUsers.map((user) => [user.id, user]));
     const tree = [];
 
-    users.forEach((user) => {
-      const managerId = user.reportingTo ? user.reportingTo.toString() : null;
+    plainUsers.forEach((user) => {
+      const managerId = user.reportingTo || null;
       if (managerId && byId.has(managerId)) {
         const manager = byId.get(managerId);
         manager.reports = manager.reports || [];

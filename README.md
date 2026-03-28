@@ -5,7 +5,7 @@ A production-ready performance management system with role-based access, goal se
 ## Tech Stack
 - Frontend: React + Vite
 - Backend: Node.js + Express
-- Database: MongoDB
+- Database: PostgreSQL
 - Auth: JWT
 
 ## Project Structure
@@ -15,7 +15,7 @@ A production-ready performance management system with role-based access, goal se
 ## Backend Setup
 1. Copy environment file
    - `backend/.env.example` -> `backend/.env`
-2. Update MongoDB connection and JWT secret in `backend/.env`
+2. Update PostgreSQL connection and JWT secret in `backend/.env`
 3. Install dependencies
    - `cd backend`
    - `npm install`

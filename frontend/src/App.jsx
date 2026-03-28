@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
+import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
@@ -12,17 +13,11 @@ import Admin from "./pages/Admin";
 const App = () => {
   return (
     <Routes>
+      {/* Public routes */}
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<Login />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Dashboard />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
+
+      {/* Role-based dashboard routes — all use the same Layout+Dashboard */}
       <Route
         path="/dashboard"
         element={
@@ -33,6 +28,48 @@ const App = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/reporting-dashboard"
+        element={
+          <ProtectedRoute roles={["ReportingOfficer"]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reviewing-dashboard"
+        element={
+          <ProtectedRoute roles={["ReviewingOfficer"]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/accepting-dashboard"
+        element={
+          <ProtectedRoute roles={["AcceptingOfficer"]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin-dashboard"
+        element={
+          <ProtectedRoute roles={["Admin"]}>
+            <Layout>
+              <Admin />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Shared feature routes */}
       <Route
         path="/goals"
         element={
@@ -63,17 +100,9 @@ const App = () => {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute roles={["Admin"]}>
-            <Layout>
-              <Admin />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Legacy /admin alias */}
+      <Route path="/admin" element={<Navigate to="/admin-dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

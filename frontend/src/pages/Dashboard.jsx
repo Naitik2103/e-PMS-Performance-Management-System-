@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { apiClient } from "../api/client";
+import { Target, BarChart2, ClipboardList, TrendingUp, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState({ goals: 0, tracking: 0, reviews: 0 });
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({ goals: 0, tracking: 0, reviews: 0, status: "Active" });
 
   useEffect(() => {
     const loadStats = async () => {
@@ -13,58 +16,118 @@ const Dashboard = () => {
           const [goals, tracking, reviews] = await Promise.all([
             apiClient.get("/goals/my"),
             apiClient.get("/tracking/my"),
-            apiClient.get("/reviews/my")
+            apiClient.get("/reviews/my"),
           ]);
-          setStats({ goals: goals.data.length, tracking: tracking.data.length, reviews: reviews.data.length });
+          setStats({ goals: goals.data.length, tracking: tracking.data.length, reviews: reviews.data.length, status: "Active" });
         } else if (user?.role === "ReportingOfficer") {
           const [goals, tracking, reviews] = await Promise.all([
             apiClient.get("/goals/pending/ro"),
             apiClient.get("/tracking/team"),
-            apiClient.get("/reviews/queue")
+            apiClient.get("/reviews/queue"),
           ]);
-          setStats({ goals: goals.data.length, tracking: tracking.data.length, reviews: reviews.data.length });
+          setStats({ goals: goals.data.length, tracking: tracking.data.length, reviews: reviews.data.length, status: "Active" });
         } else {
           const [goals, reviews] = await Promise.all([
             apiClient.get("/goals/all"),
-            apiClient.get("/reviews/queue")
+            apiClient.get("/reviews/queue"),
           ]);
-          setStats({ goals: goals.data.length, tracking: 0, reviews: reviews.data.length });
+          setStats({ goals: goals.data.length, tracking: 0, reviews: reviews.data.length, status: "Active" });
         }
       } catch (error) {
-        setStats({ goals: 0, tracking: 0, reviews: 0 });
+        setStats({ goals: 0, tracking: 0, reviews: 0, status: "Active" });
       }
     };
-
-    if (user) {
-      loadStats();
-    }
+    if (user) loadStats();
   }, [user]);
 
+  const statCards = [
+    {
+      icon: Target,
+      label: "Total Goals",
+      value: stats.goals,
+      color: "#2b5fbf",
+      bg: "#eef2fb",
+      action: "/goals",
+      actionLabel: "View Goals",
+    },
+    {
+      icon: BarChart2,
+      label: "Tracking Records",
+      value: stats.tracking,
+      color: "#0d9488",
+      bg: "#f0fdf4",
+      action: "/tracking",
+      actionLabel: "View Tracking",
+    },
+    {
+      icon: ClipboardList,
+      label: "Reviews in Pipeline",
+      value: stats.reviews,
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      action: "/reviews",
+      actionLabel: "View Reviews",
+    },
+    {
+      icon: TrendingUp,
+      label: "Performance Status",
+      value: stats.status,
+      color: "#c05621",
+      bg: "#fff7ed",
+      action: null,
+      actionLabel: null,
+    },
+  ];
+
   return (
-    <div className="grid-two">
-      <div className="card">
-        <div className="card-header">
-          <h2>Goals Overview</h2>
+    <div className="dashboard-page">
+      {/* Welcome Banner */}
+      <div className="dashboard-welcome">
+        <div>
+          <h2 className="welcome-title">Welcome back, {user?.name?.split(" ")[0]} 👋</h2>
+          <p className="welcome-sub">Here is an overview of your performance management activity.</p>
         </div>
-        <p>Total goals in your scope: <strong>{stats.goals}</strong></p>
+        <div className="welcome-badge">{user?.role?.replace(/([A-Z])/g, " $1").trim()}</div>
       </div>
-      <div className="card">
-        <div className="card-header">
-          <h2>Tracking Updates</h2>
-        </div>
-        <p>Tracking items needing attention: <strong>{stats.tracking}</strong></p>
+
+      {/* Stat Cards */}
+      <div className="stat-cards-grid">
+        {statCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div className="stat-card" key={card.label}>
+              <div className="stat-card-top">
+                <div className="stat-card-icon" style={{ background: card.bg, color: card.color }}>
+                  <Icon size={22} />
+                </div>
+                <div className="stat-card-meta">
+                  <div className="stat-card-label">{card.label}</div>
+                  <div className="stat-card-value" style={{ color: card.color }}>{card.value}</div>
+                </div>
+              </div>
+              {card.action && (
+                <button
+                  className="stat-card-action"
+                  onClick={() => navigate(card.action)}
+                >
+                  {card.actionLabel} <ArrowRight size={14} />
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
-      <div className="card">
+
+      {/* Info Card */}
+      <div className="card dashboard-info-card">
         <div className="card-header">
-          <h2>Year-End Reviews</h2>
+          <h2>About Your Dashboard</h2>
         </div>
-        <p>Reviews in pipeline: <strong>{stats.reviews}</strong></p>
-      </div>
-      <div className="card">
-        <div className="card-header">
-          <h2>Welcome</h2>
-        </div>
-        <p>Hi {user?.name}, manage your performance workflows with real-time status updates and approvals.</p>
+        <p style={{ color: "var(--grey-600)", lineHeight: 1.7 }}>
+          This dashboard shows a summary of your performance management activity. Use the sidebar
+          navigation to access Goals, Tracking, and Reviews. Your role is <strong>{user?.role?.replace(/([A-Z])/g, " $1").trim()}</strong>,
+          which determines what actions you can take in the system.
+        </p>
       </div>
     </div>
   );

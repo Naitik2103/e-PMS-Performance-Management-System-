@@ -1,13 +1,13 @@
 const dotenv = require("dotenv");
-const connectDb = require("../config/db");
-const User = require("../models/User");
+const { connectDb } = require("../config/db");
+const { sequelize, User } = require("../models");
 
 dotenv.config();
 
 const seed = async () => {
   try {
     await connectDb();
-    await User.deleteMany({});
+    await sequelize.sync({ force: true });
 
     const adminPassword = await User.hashPassword("Password123!");
     const acceptingPassword = await User.hashPassword("Password123!");
@@ -37,7 +37,7 @@ const seed = async () => {
       passwordHash: reviewingPassword,
       role: "ReviewingOfficer",
       department: "Central Office",
-      reportingTo: acceptingOfficer._id
+      reportingTo: acceptingOfficer.id
     });
 
     const reportingOfficer = await User.create({
@@ -46,7 +46,7 @@ const seed = async () => {
       passwordHash: reportingPassword,
       role: "ReportingOfficer",
       department: "Computer Science",
-      reportingTo: reviewingOfficer._id
+      reportingTo: reviewingOfficer.id
     });
 
     const employee = await User.create({
@@ -55,7 +55,7 @@ const seed = async () => {
       passwordHash: employeePassword,
       role: "Employee",
       department: "Computer Science",
-      reportingTo: reportingOfficer._id
+      reportingTo: reportingOfficer.id
     });
 
     console.log("Seeded users:", {

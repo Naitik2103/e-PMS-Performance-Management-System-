@@ -1,13 +1,23 @@
-const mongoose = require("mongoose");
+const { Sequelize } = require("sequelize");
+require("dotenv").config();
+
+const sequelize = new Sequelize(
+  process.env.PG_DATABASE,
+  process.env.PG_USER,
+  process.env.PG_PASSWORD,
+  {
+    host: process.env.PG_HOST || "localhost",
+    port: Number(process.env.PG_PORT || 5432),
+    dialect: "postgres",
+    logging: false
+  }
+);
 
 const connectDb = async () => {
-  const uri = process.env.MONGO_URI;
-  if (!uri) {
-    throw new Error("MONGO_URI is not configured");
+  if (!process.env.PG_DATABASE) {
+    throw new Error("PG_DATABASE is not configured");
   }
-  await mongoose.connect(uri, {
-    autoIndex: true
-  });
+  await sequelize.authenticate();
 };
 
-module.exports = connectDb;
+module.exports = { sequelize, connectDb };

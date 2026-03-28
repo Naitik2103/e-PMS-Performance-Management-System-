@@ -26,9 +26,7 @@ const Reviews = () => {
   };
 
   useEffect(() => {
-    if (user) {
-      loadReviews();
-    }
+    if (user) loadReviews();
   }, [user]);
 
   const submitSelfSummary = async () => {
@@ -70,19 +68,24 @@ const Reviews = () => {
         <div className="card">
           <div className="card-header">
             <h2>Self Performance Summary</h2>
+            <span className="muted">Submit your end-of-year self-assessment</span>
           </div>
           <div className="form-grid">
-            <div>
-              <label>Year</label>
-              <input
-                type="number"
-                value={selfForm.year}
-                onChange={(e) => setSelfForm({ ...selfForm, year: Number(e.target.value) })}
-              />
+            <div className="form-row">
+              <div style={{ maxWidth: 180 }}>
+                <label>Performance Year</label>
+                <input
+                  type="number"
+                  value={selfForm.year}
+                  onChange={(e) => setSelfForm({ ...selfForm, year: Number(e.target.value) })}
+                />
+              </div>
             </div>
             <div>
-              <label>Summary</label>
+              <label>Self Summary</label>
               <textarea
+                rows={5}
+                placeholder="Describe your achievements, challenges, and contributions this year..."
                 value={selfForm.selfSummary}
                 onChange={(e) => setSelfForm({ ...selfForm, selfSummary: e.target.value })}
               />
@@ -100,6 +103,7 @@ const Reviews = () => {
       <div className="card">
         <div className="card-header">
           <h2>Reviews</h2>
+          <span className="muted">{reviews.length} record{reviews.length !== 1 ? "s" : ""}</span>
         </div>
         <table className="table">
           <thead>
@@ -107,52 +111,60 @@ const Reviews = () => {
               <th>Employee</th>
               <th>Year</th>
               <th>Status</th>
+              <th>Self Summary</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
+            {reviews.length === 0 && (
+              <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>
+            )}
             {reviews.map((review) => (
-              <tr key={review._id}>
+              <tr key={review.id}>
                 <td>{review.employee?.name || "Self"}</td>
                 <td>{review.year}</td>
                 <td><StatusBadge status={review.status} /></td>
+                <td className="summary-cell">
+                  {review.selfSummary
+                    ? <span title={review.selfSummary}>{review.selfSummary.slice(0, 60)}{review.selfSummary.length > 60 ? "..." : ""}</span>
+                    : <span className="muted">—</span>
+                  }
+                </td>
                 <td>
                   {user?.role === "ReportingOfficer" && (
                     <div className="inline-form">
                       <input
                         type="number"
                         placeholder="Score"
-                        value={ratingInputs[review._id]?.score || ""}
+                        value={ratingInputs[review.id]?.score || ""}
                         onChange={(e) =>
                           setRatingInputs((prev) => ({
                             ...prev,
-                            [review._id]: { ...prev[review._id], score: e.target.value }
+                            [review.id]: { ...prev[review.id], score: e.target.value },
                           }))
                         }
                       />
                       <input
                         placeholder="Remarks"
-                        value={ratingInputs[review._id]?.remarks || ""}
+                        value={ratingInputs[review.id]?.remarks || ""}
                         onChange={(e) =>
                           setRatingInputs((prev) => ({
                             ...prev,
-                            [review._id]: { ...prev[review._id], remarks: e.target.value }
+                            [review.id]: { ...prev[review.id], remarks: e.target.value },
                           }))
                         }
                       />
-                      <button className="btn" type="button" onClick={() => submitRating(review._id)}>
-                        Submit
-                      </button>
+                      <button className="btn" type="button" onClick={() => submitRating(review.id)}>Submit</button>
                     </div>
                   )}
                   {user?.role === "ReviewingOfficer" && (
                     <div className="inline-form-short">
                       <input
                         placeholder="Remarks"
-                        value={remarkInputs[review._id] || ""}
-                        onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review._id]: e.target.value }))}
+                        value={remarkInputs[review.id] || ""}
+                        onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
                       />
-                      <button className="btn" type="button" onClick={() => submitRemarks(review._id, "/reviews/review-approve")}>
+                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/review-approve")}>
                         Approve
                       </button>
                     </div>
@@ -161,10 +173,10 @@ const Reviews = () => {
                     <div className="inline-form-short">
                       <input
                         placeholder="Final remarks"
-                        value={remarkInputs[review._id] || ""}
-                        onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review._id]: e.target.value }))}
+                        value={remarkInputs[review.id] || ""}
+                        onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
                       />
-                      <button className="btn" type="button" onClick={() => submitRemarks(review._id, "/reviews/accept")}>
+                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/accept")}>
                         Accept
                       </button>
                     </div>
@@ -174,7 +186,7 @@ const Reviews = () => {
             ))}
           </tbody>
         </table>
-        {error && <div className="error-text">{error}</div>}
+        {error && <div className="error-text" style={{ padding: "12px 0" }}>{error}</div>}
       </div>
     </div>
   );

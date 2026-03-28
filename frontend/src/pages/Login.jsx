@@ -10,6 +10,14 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const roleRedirects = {
+    Employee: "/dashboard",
+    ReportingOfficer: "/reporting-dashboard",
+    ReviewingOfficer: "/reviewing-dashboard",
+    AcceptingOfficer: "/accepting-dashboard",
+    Admin: "/admin-dashboard",
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -17,7 +25,7 @@ const Login = () => {
     try {
       const user = await login(email, password);
       if (user) {
-        navigate("/dashboard");
+        navigate(roleRedirects[user.role] || "/dashboard");
       }
     } catch (err) {
       setError(err.response?.data?.message || "Login failed");
@@ -28,23 +36,56 @@ const Login = () => {
 
   return (
     <div className="login-page">
-      <div className="login-card">
-        <h2>e-PMS Login</h2>
-        <p>Sign in with your official credentials.</p>
-        <form className="form-grid" onSubmit={handleSubmit}>
-          <div>
-            <label>Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
+      <div className="login-split">
+        <div className="login-brand">
+          <div className="login-brand-logo">e-PMS</div>
+          <h2 className="login-brand-title">Performance Management System</h2>
+          <p className="login-brand-sub">Track goals, manage appraisals, and drive organizational performance — all in one place.</p>
+          <div className="login-brand-features">
+            <div className="lbf-item">🎯 Annual Goal Setting</div>
+            <div className="lbf-item">📊 Six-Month Tracking</div>
+            <div className="lbf-item">🏆 Year-End Evaluation</div>
+            <div className="lbf-item">👥 Hierarchical Reviews</div>
           </div>
-          <div>
-            <label>Password</label>
-            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
+        </div>
+        <div className="login-form-side">
+          <div className="login-card">
+            <div className="login-card-header">
+              <div className="login-card-logo">e-PMS</div>
+              <h2>Welcome back</h2>
+              <p>Sign in with your official credentials to access your dashboard.</p>
+            </div>
+            <form className="form-grid" onSubmit={handleSubmit}>
+              <div>
+                <label>Email Address</label>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label>Password</label>
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type="password"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+              {error && <div className="error-text">{error}</div>}
+              <button className="btn login-submit-btn" type="submit" disabled={loading}>
+                {loading ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+            <div className="login-back">
+              <a href="/">← Back to Home</a>
+            </div>
           </div>
-          {error && <div className="error-text">{error}</div>}
-          <button className="btn" type="submit" disabled={loading}>
-            {loading ? "Signing in..." : "Login"}
-          </button>
-        </form>
+        </div>
       </div>
     </div>
   );

@@ -1,12 +1,11 @@
-const YearEndReview = require("../models/YearEndReview");
-const User = require("../models/User");
+const { YearEndReview, User } = require("../models");
 
 const submitSelfSummary = async (req, res, next) => {
   try {
     const { year, selfSummary } = req.body;
-    let review = await YearEndReview.findOne({ employee: req.user._id, year });
+    let review = await YearEndReview.findOne({ where: { employeeId: req.user.id, year } });
     if (!review) {
-      review = await YearEndReview.create({ employee: req.user._id, year });
+      review = await YearEndReview.create({ employeeId: req.user.id, year });
     }
 
     review.selfSummary = selfSummary;
@@ -23,13 +22,15 @@ const submitSelfSummary = async (req, res, next) => {
 const rateByRO = async (req, res, next) => {
   try {
     const { reviewId, score, remarks } = req.body;
-    const review = await YearEndReview.findById(reviewId).populate("employee", "reportingTo");
+    const review = await YearEndReview.findByPk(reviewId, {
+      include: [{ model: User, as: "employee", attributes: ["id", "reportingTo"] }]
+    });
     if (!review) {
       res.status(404);
       return next(new Error("Review not found"));
     }
 
-    if (review.employee.reportingTo?.toString() !== req.user._id.toString()) {
+    if (review.employee.reportingTo !== req.user.id) {
       res.status(403);
       return next(new Error("Access denied for this review"));
     }
@@ -49,7 +50,9 @@ const rateByRO = async (req, res, next) => {
 const reviewByReviewing = async (req, res, next) => {
   try {
     const { reviewId, remarks } = req.body;
-    const review = await YearEndReview.findById(reviewId).populate("employee", "reportingTo");
+    const review = await YearEndReview.findByPk(reviewId, {
+      include: [{ model: User, as: "employee", attributes: ["id", "reportingTo"] }]
+    });
     if (!review) {
       res.status(404);
       return next(new Error("Review not found"));
@@ -59,8 +62,8 @@ const reviewByReviewing = async (req, res, next) => {
       return next(new Error("Review is not ready for reviewing approval"));
     }
 
-    const reportingOfficer = await User.findById(review.employee.reportingTo);
-    if (!reportingOfficer || reportingOfficer.reportingTo?.toString() !== req.user._id.toString()) {
+    const reportingOfficer = await User.findByPk(review.employee.reportingTo);
+    if (!reportingOfficer || reportingOfficer.reportingTo !== req.user.id) {
       res.status(403);
       return next(new Error("Access denied for this review"));
     }
@@ -79,7 +82,7 @@ const reviewByReviewing = async (req, res, next) => {
 const acceptByAccepting = async (req, res, next) => {
   try {
     const { reviewId, remarks } = req.body;
-    const review = await YearEndReview.findById(reviewId);
+    const review = await YearEndReview.findByPk(reviewId);
     if (!review) {
       res.status(404);
       return next(new Error("Review not found"));
@@ -102,7 +105,10 @@ const acceptByAccepting = async (req, res, next) => {
 
 const listMyReviews = async (req, res, next) => {
   try {
-    const reviews = await YearEndReview.find({ employee: req.user._id }).sort({ createdAt: -1 });
+    const reviews = await YearEndReview.findAll({
+      where: { employeeId: req.user.id },
+      order: [["createdAt", "DESC"]]
+    });
     return res.json(reviews);
   } catch (error) {
     return next(error);
@@ -113,31 +119,42 @@ const listQueue = async (req, res, next) => {
   try {
     const role = req.user.role;
     if (role === "Admin") {
-      const reviews = await YearEndReview.find({}).populate("employee", "name department");
+      const reviews = await YearEndReview.findAll({
+        include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }]
+      });
       return res.json(reviews);
     }
 
     if (role === "ReportingOfficer") {
-      const reports = await User.find({ reportingTo: req.user._id }).select("_id");
-      const reportIds = reports.map((report) => report._id);
-      const reviewDocs = await YearEndReview.find({ employee: { $in: reportIds }, status: "submitted" })
-        .populate("employee", "name department");
+      const reports = await User.findAll({ where: { reportingTo: req.user.id }, attributes: ["id"] });
+      const reportIds = reports.map((report) => report.id);
+      const reviewDocs = await YearEndReview.findAll({
+        where: { employeeId: reportIds, status: "submitted" },
+        include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }]
+      });
       return res.json(reviewDocs);
     }
 
     if (role === "ReviewingOfficer") {
-      const reportingOfficers = await User.find({ reportingTo: req.user._id, role: "ReportingOfficer" }).select("_id");
-      const reportingOfficerIds = reportingOfficers.map((officer) => officer._id);
-      const reportDocs = await User.find({ reportingTo: { $in: reportingOfficerIds } }).select("_id");
-      const reportIds = reportDocs.map((report) => report._id);
-      const reviewDocs = await YearEndReview.find({ employee: { $in: reportIds }, status: "ro_rated" })
-        .populate("employee", "name department");
+      const reportingOfficers = await User.findAll({
+        where: { reportingTo: req.user.id, role: "ReportingOfficer" },
+        attributes: ["id"]
+      });
+      const reportingOfficerIds = reportingOfficers.map((officer) => officer.id);
+      const reportDocs = await User.findAll({ where: { reportingTo: reportingOfficerIds }, attributes: ["id"] });
+      const reportIds = reportDocs.map((report) => report.id);
+      const reviewDocs = await YearEndReview.findAll({
+        where: { employeeId: reportIds, status: "ro_rated" },
+        include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }]
+      });
       return res.json(reviewDocs);
     }
 
     if (role === "AcceptingOfficer") {
-      const reviewDocs = await YearEndReview.find({ status: "review_approved" })
-        .populate("employee", "name department");
+      const reviewDocs = await YearEndReview.findAll({
+        where: { status: "review_approved" },
+        include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }]
+      });
       return res.json(reviewDocs);
     }
 

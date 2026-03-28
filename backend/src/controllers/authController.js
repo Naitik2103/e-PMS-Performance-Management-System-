@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const { User } = require("../models");
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -9,17 +9,17 @@ const generateToken = (id) =>
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
     if (!user || !(await user.matchPassword(password))) {
       res.status(401);
       return next(new Error("Invalid credentials"));
     }
 
-    const token = generateToken(user._id);
+    const token = generateToken(user.id);
     return res.json({
       token,
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,

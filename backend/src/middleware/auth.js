@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const { User } = require("../models");
 
 const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization || "";
@@ -11,7 +11,7 @@ const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("-passwordHash");
+    const user = await User.findByPk(decoded.id, { attributes: { exclude: ["passwordHash"] } });
     if (!user) {
       res.status(401);
       return next(new Error("Not authorized, user not found"));
