@@ -8,6 +8,8 @@ const userRoutes = require("./routes/userRoutes");
 const goalRoutes = require("./routes/goalRoutes");
 const trackingRoutes = require("./routes/trackingRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 const { notFound, errorHandler } = require("./middleware/errorHandler");
 
 dotenv.config();
@@ -27,6 +29,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/goals", goalRoutes);
 app.use("/api/tracking", trackingRoutes);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

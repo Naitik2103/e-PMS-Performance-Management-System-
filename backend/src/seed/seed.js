@@ -1,6 +1,6 @@
 const dotenv = require("dotenv");
 const { connectDb } = require("../config/db");
-const { sequelize, User } = require("../models");
+const { sequelize, User, AppraisalCycle, QuantitativeAttributeMaster } = require("../models");
 
 dotenv.config();
 
@@ -58,12 +58,32 @@ const seed = async () => {
       reportingTo: reportingOfficer.id
     });
 
+    const year = new Date().getFullYear();
+    const cycle = await AppraisalCycle.create({
+      name: `Annual Appraisal ${year}`,
+      year,
+      startDate: `${year}-01-01`,
+      endDate: `${year}-12-31`,
+      isActive: true,
+      status: "active"
+    });
+
+    await QuantitativeAttributeMaster.bulkCreate([
+      { category: "Values", attributeName: "Integrity", description: "Acts with honesty and accountability" },
+      { category: "Values", attributeName: "Commitment", description: "Demonstrates commitment to institutional goals" },
+      { category: "Competencies", attributeName: "Problem Solving", description: "Resolves issues effectively" },
+      { category: "Competencies", attributeName: "Communication", description: "Communicates clearly and professionally" },
+      { category: "Personal Qualities", attributeName: "Adaptability", description: "Adjusts well to change" },
+      { category: "Knowledge", attributeName: "Domain Knowledge", description: "Demonstrates strong subject knowledge" }
+    ]);
+
     console.log("Seeded users:", {
       admin: admin.email,
       acceptingOfficer: acceptingOfficer.email,
       reviewingOfficer: reviewingOfficer.email,
       reportingOfficer: reportingOfficer.email,
-      employee: employee.email
+      employee: employee.email,
+      activeCycle: cycle.name
     });
 
     process.exit(0);

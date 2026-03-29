@@ -5,33 +5,46 @@ import { UserPlus, ChevronRight } from "lucide-react";
 const Admin = () => {
   const [users, setUsers] = useState([]);
   const [tree, setTree] = useState([]);
+  const [cycles, setCycles] = useState([]);
   const [roleDrafts, setRoleDrafts] = useState({});
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     department: "",
-    reportingTo: "",
+    reportingTo: ""
+  });
+  const [cycleForm, setCycleForm] = useState({
+    name: `Annual Appraisal ${new Date().getFullYear()}`,
+    year: new Date().getFullYear(),
+    startDate: `${new Date().getFullYear()}-01-01`,
+    endDate: `${new Date().getFullYear()}-12-31`,
+    isActive: true,
+    status: "active"
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const loadUsers = async () => {
     try {
-      const [listRes, treeRes] = await Promise.all([
+      const [listRes, treeRes, cyclesRes] = await Promise.all([
         apiClient.get("/users"),
         apiClient.get("/users/hierarchy"),
+        apiClient.get("/admin/cycles")
       ]);
       setUsers(listRes.data);
       setTree(treeRes.data);
+      setCycles(cyclesRes.data);
       setRoleDrafts(
         listRes.data.reduce((acc, user) => {
           acc[user.id] = user.role;
           return acc;
         }, {})
       );
-    } catch (err) {
+    } catch {
       setUsers([]);
+      setTree([]);
+      setCycles([]);
     }
   };
 
@@ -56,11 +69,23 @@ const Admin = () => {
     setError("");
     setSuccess("");
     try {
-      await apiClient.put(`/users/${userId}`, { role: roleDrafts[userId] });
+      await apiClient.put(`/admin/users/${userId}/role`, { role: roleDrafts[userId] });
       setSuccess("Role updated.");
       loadUsers();
     } catch (err) {
       setError(err.response?.data?.message || "Unable to update role");
+    }
+  };
+
+  const createCycle = async () => {
+    setError("");
+    setSuccess("");
+    try {
+      await apiClient.post("/admin/cycles", cycleForm);
+      setSuccess("Appraisal cycle created.");
+      loadUsers();
+    } catch (err) {
+      setError(err.response?.data?.message || "Unable to create cycle");
     }
   };
 
@@ -77,7 +102,6 @@ const Admin = () => {
 
   return (
     <div className="page-content">
-      {/* Create User */}
       <div className="card">
         <div className="card-header">
           <h2><UserPlus size={18} style={{ marginRight: 8, verticalAlign: "middle" }} />Create New User</h2>
@@ -86,21 +110,21 @@ const Admin = () => {
           <div className="form-row">
             <div>
               <label>Full Name</label>
-              <input placeholder="e.g. Ali Hassan" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
               <label>Email Address</label>
-              <input type="email" placeholder="user@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
           </div>
           <div className="form-row">
             <div>
               <label>Password</label>
-              <input type="password" placeholder="Min. 8 characters" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
             </div>
             <div>
               <label>Department</label>
-              <input placeholder="e.g. Computer Science" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+              <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
             </div>
           </div>
           <div className="form-row">
@@ -109,14 +133,11 @@ const Admin = () => {
               <select value={form.reportingTo} onChange={(e) => setForm({ ...form, reportingTo: e.target.value })}>
                 <option value="">None (Top Level)</option>
                 {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name} — {user.role}
-                  </option>
+                  <option key={user.id} value={user.id}>{user.name} - {user.role}</option>
                 ))}
               </select>
             </div>
           </div>
-          <div className="muted">New users are created as <strong>Employee</strong> by default. Update their role from the Users table below.</div>
           {error && <div className="error-text">{error}</div>}
           {success && <div className="success-text">{success}</div>}
           <div className="action-row">
@@ -125,11 +146,50 @@ const Admin = () => {
         </div>
       </div>
 
-      {/* Users Table */}
+      <div className="card">
+        <div className="card-header">
+          <h2>Appraisal Cycle Management</h2>
+        </div>
+        <div className="form-grid">
+          <div className="form-row">
+            <div>
+              <label>Cycle Name</label>
+              <input value={cycleForm.name} onChange={(e) => setCycleForm({ ...cycleForm, name: e.target.value })} />
+            </div>
+            <div>
+              <label>Year</label>
+              <input type="number" value={cycleForm.year} onChange={(e) => setCycleForm({ ...cycleForm, year: Number(e.target.value) })} />
+            </div>
+          </div>
+          <div className="form-row">
+            <div>
+              <label>Start Date</label>
+              <input type="date" value={cycleForm.startDate} onChange={(e) => setCycleForm({ ...cycleForm, startDate: e.target.value })} />
+            </div>
+            <div>
+              <label>End Date</label>
+              <input type="date" value={cycleForm.endDate} onChange={(e) => setCycleForm({ ...cycleForm, endDate: e.target.value })} />
+            </div>
+          </div>
+          <div className="action-row">
+            <button className="btn" type="button" onClick={createCycle}>Create Active Cycle</button>
+          </div>
+          <table className="table">
+            <thead>
+              <tr><th>Name</th><th>Year</th><th>Status</th><th>Active</th></tr>
+            </thead>
+            <tbody>
+              {cycles.map((cycle) => (
+                <tr key={cycle.id}><td>{cycle.name}</td><td>{cycle.year}</td><td>{cycle.status}</td><td>{cycle.isActive ? "Yes" : "No"}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-header">
           <h2>All Users</h2>
-          <span className="muted">{users.length} users registered</span>
         </div>
         <table className="table">
           <thead>
@@ -142,27 +202,13 @@ const Admin = () => {
             </tr>
           </thead>
           <tbody>
-            {users.length === 0 && (
-              <tr><td colSpan={5} className="table-empty">No users found.</td></tr>
-            )}
             {users.map((user) => (
               <tr key={user.id}>
-                <td>
-                  <div className="user-cell">
-                    <div className="user-cell-avatar">
-                      {user.name?.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                    </div>
-                    <span>{user.name}</span>
-                  </div>
-                </td>
+                <td>{user.name}</td>
                 <td>{user.email}</td>
-                <td>{user.department || <span className="muted">—</span>}</td>
+                <td>{user.department || <span className="muted">-</span>}</td>
                 <td>
-                  <select
-                    className="role-select"
-                    value={roleDrafts[user.id] || user.role}
-                    onChange={(e) => setRoleDrafts((prev) => ({ ...prev, [user.id]: e.target.value }))}
-                  >
+                  <select value={roleDrafts[user.id] || user.role} onChange={(e) => setRoleDrafts((prev) => ({ ...prev, [user.id]: e.target.value }))}>
                     <option value="Employee">Employee</option>
                     <option value="ReportingOfficer">Reporting Officer</option>
                     <option value="ReviewingOfficer">Reviewing Officer</option>
@@ -170,16 +216,13 @@ const Admin = () => {
                     <option value="Admin">Admin</option>
                   </select>
                 </td>
-                <td>
-                  <button className="btn ghost" type="button" onClick={() => updateRole(user.id)}>Save Role</button>
-                </td>
+                <td><button className="btn ghost" type="button" onClick={() => updateRole(user.id)}>Save Role</button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Hierarchy */}
       <div className="card">
         <div className="card-header">
           <h2>Reporting Hierarchy</h2>

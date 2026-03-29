@@ -202,6 +202,10 @@
   gap: 12px;
 }
 
+.topbar-notif-wrap {
+  position: relative;
+}
+
 .topbar-icon-btn {
   background: var(--grey-100);
   border: none;
@@ -214,10 +218,93 @@
   cursor: pointer;
   color: var(--grey-600);
   transition: background 0.15s;
+  position: relative;
 }
 
 .topbar-icon-btn:hover {
   background: var(--grey-200);
+}
+
+.topbar-notif-count {
+  position: absolute;
+  top: -5px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border: 2px solid #fff;
+}
+
+.topbar-notif-panel {
+  position: absolute;
+  right: 0;
+  top: 44px;
+  width: 320px;
+  max-height: 420px;
+  background: var(--white);
+  border: 1px solid var(--grey-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.topbar-notif-panel-head {
+  padding: 12px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  border-bottom: 1px solid var(--grey-200);
+  color: var(--navy-dark);
+}
+
+.topbar-notif-empty {
+  padding: 18px 14px;
+  color: var(--grey-600);
+  font-size: 13px;
+}
+
+.topbar-notif-list {
+  overflow-y: auto;
+  max-height: 360px;
+}
+
+.topbar-notif-item {
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid var(--grey-100);
+  background: var(--white);
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.topbar-notif-item:hover {
+  background: var(--grey-50);
+}
+
+.topbar-notif-item.unread {
+  background: #f0f6ff;
+}
+
+.topbar-notif-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy-dark);
+  margin-bottom: 4px;
+}
+
+.topbar-notif-message {
+  font-size: 12px;
+  color: var(--grey-600);
+  line-height: 1.35;
 }
 
 .topbar-user-pill {
@@ -227,6 +314,129 @@
   background: var(--grey-100);
   border-radius: var(--radius-full);
   padding: 6px 14px 6px 6px;
+}
+
+.topbar-profile-wrap {
+  position: relative;
+}
+
+.topbar-user-pill-btn {
+  border: none;
+  cursor: pointer;
+}
+
+.topbar-profile-chevron {
+  color: var(--grey-400);
+  transition: transform 0.15s;
+}
+
+.topbar-profile-chevron.open {
+  transform: rotate(180deg);
+}
+
+.topbar-profile-panel {
+  position: absolute;
+  right: 0;
+  top: 48px;
+  width: 340px;
+  background: var(--white);
+  border: 1px solid var(--grey-200);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  z-index: 120;
+  overflow: hidden;
+}
+
+.topbar-profile-head {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef4ff 45%, #e9f0ff 100%);
+  border-bottom: 1px solid var(--grey-200);
+}
+
+.topbar-profile-head-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.topbar-profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--navy-dark);
+  line-height: 1.1;
+}
+
+.topbar-profile-sub {
+  font-size: 13px;
+  color: var(--grey-600);
+  margin-top: 4px;
+}
+
+.topbar-profile-role-chip {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1f3b73;
+  background: #e7efff;
+  border: 1px solid #d8e5ff;
+}
+
+.topbar-profile-info-list {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.topbar-profile-info-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  background: #fbfcff;
+  border: 1px solid var(--grey-200);
+  border-radius: 10px;
+}
+
+.topbar-profile-info-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--grey-600);
+}
+
+.topbar-profile-info-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy-dark);
+  text-align: right;
+  max-width: 185px;
+  overflow-wrap: anywhere;
+}
+
+.topbar-profile-info-status {
+  font-size: 12px;
+  font-weight: 700;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 4px 10px;
 }
 
 .topbar-avatar {

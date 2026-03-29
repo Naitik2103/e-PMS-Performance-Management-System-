@@ -20,7 +20,7 @@ const Reviews = () => {
         const response = await apiClient.get("/reviews/queue");
         setReviews(response.data);
       }
-    } catch (err) {
+    } catch {
       setReviews([]);
     }
   };
@@ -43,7 +43,7 @@ const Reviews = () => {
   const submitRating = async (reviewId) => {
     setError("");
     try {
-      const payload = ratingInputs[reviewId] || { score: 0, remarks: "" };
+      const payload = ratingInputs[reviewId] || { score: 3, remarks: "" };
       await apiClient.post("/reviews/ro-rate", { reviewId, score: Number(payload.score), remarks: payload.remarks });
       loadReviews();
     } catch (err) {
@@ -55,7 +55,7 @@ const Reviews = () => {
     setError("");
     try {
       const remarks = remarkInputs[reviewId] || "";
-      await apiClient.post(endpoint, { reviewId, remarks });
+      await apiClient.post(endpoint, { reviewId, remarks, score: 3 });
       loadReviews();
     } catch (err) {
       setError(err.response?.data?.message || "Unable to submit remarks");
@@ -67,8 +67,8 @@ const Reviews = () => {
       {user?.role === "Employee" && (
         <div className="card">
           <div className="card-header">
-            <h2>Self Performance Summary</h2>
-            <span className="muted">Submit your end-of-year self-assessment</span>
+            <h2>Self Appraisal</h2>
+            <span className="muted">Submit your annual self-appraisal</span>
           </div>
           <div className="form-grid">
             <div className="form-row">
@@ -85,16 +85,13 @@ const Reviews = () => {
               <label>Self Summary</label>
               <textarea
                 rows={5}
-                placeholder="Describe your achievements, challenges, and contributions this year..."
                 value={selfForm.selfSummary}
                 onChange={(e) => setSelfForm({ ...selfForm, selfSummary: e.target.value })}
               />
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={submitSelfSummary}>
-                Submit Summary
-              </button>
+              <button className="btn" type="button" onClick={submitSelfSummary}>Submit Summary</button>
             </div>
           </div>
         </div>
@@ -102,57 +99,42 @@ const Reviews = () => {
 
       <div className="card">
         <div className="card-header">
-          <h2>Reviews</h2>
+          <h2>Review Workflow</h2>
           <span className="muted">{reviews.length} record{reviews.length !== 1 ? "s" : ""}</span>
         </div>
         <table className="table">
           <thead>
             <tr>
               <th>Employee</th>
-              <th>Year</th>
+              <th>Cycle</th>
               <th>Status</th>
-              <th>Self Summary</th>
+              <th>Final Score</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {reviews.length === 0 && (
-              <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>
-            )}
+            {reviews.length === 0 && <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>}
             {reviews.map((review) => (
               <tr key={review.id}>
                 <td>{review.employee?.name || "Self"}</td>
-                <td>{review.year}</td>
+                <td>{review.cycle?.name || review.cycle?.year || "-"}</td>
                 <td><StatusBadge status={review.status} /></td>
-                <td className="summary-cell">
-                  {review.selfSummary
-                    ? <span title={review.selfSummary}>{review.selfSummary.slice(0, 60)}{review.selfSummary.length > 60 ? "..." : ""}</span>
-                    : <span className="muted">—</span>
-                  }
-                </td>
+                <td>{review.finalScore ? Number(review.finalScore).toFixed(2) : "-"}</td>
                 <td>
                   {user?.role === "ReportingOfficer" && (
                     <div className="inline-form">
                       <input
                         type="number"
-                        placeholder="Score"
+                        min={1}
+                        max={5}
+                        placeholder="Score (1-5)"
                         value={ratingInputs[review.id]?.score || ""}
-                        onChange={(e) =>
-                          setRatingInputs((prev) => ({
-                            ...prev,
-                            [review.id]: { ...prev[review.id], score: e.target.value },
-                          }))
-                        }
+                        onChange={(e) => setRatingInputs((prev) => ({ ...prev, [review.id]: { ...prev[review.id], score: e.target.value } }))}
                       />
                       <input
                         placeholder="Remarks"
                         value={ratingInputs[review.id]?.remarks || ""}
-                        onChange={(e) =>
-                          setRatingInputs((prev) => ({
-                            ...prev,
-                            [review.id]: { ...prev[review.id], remarks: e.target.value },
-                          }))
-                        }
+                        onChange={(e) => setRatingInputs((prev) => ({ ...prev, [review.id]: { ...prev[review.id], remarks: e.target.value } }))}
                       />
                       <button className="btn" type="button" onClick={() => submitRating(review.id)}>Submit</button>
                     </div>
@@ -164,9 +146,7 @@ const Reviews = () => {
                         value={remarkInputs[review.id] || ""}
                         onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
                       />
-                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/review-approve")}>
-                        Approve
-                      </button>
+                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/review-approve")}>Approve</button>
                     </div>
                   )}
                   {user?.role === "AcceptingOfficer" && (
@@ -176,9 +156,7 @@ const Reviews = () => {
                         value={remarkInputs[review.id] || ""}
                         onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
                       />
-                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/accept")}>
-                        Accept
-                      </button>
+                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/accept")}>Finalize</button>
                     </div>
                   )}
                 </td>

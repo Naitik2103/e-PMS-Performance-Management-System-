@@ -35,8 +35,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    localStorage.removeItem("epms_token");
-    setUser(null);
+    apiClient.post("/auth/logout").catch(() => null).finally(() => {
+      localStorage.removeItem("epms_token");
+      setUser(null);
+    });
   };
 
   return (

@@ -11,7 +11,7 @@ const createUserValidation = [
 const updateUserValidation = [
   body("role").optional().isIn(["Employee", "ReportingOfficer", "ReviewingOfficer", "AcceptingOfficer", "Admin"]).withMessage("Invalid role"),
   body("department").optional().trim().notEmpty().withMessage("Department is required"),
-  body("reportingTo").optional().isMongoId().withMessage("reportingTo must be a valid id")
+  body("reportingTo").optional().isUUID().withMessage("reportingTo must be a valid UUID")
 ];
 
 module.exports = { createUserValidation, updateUserValidation };

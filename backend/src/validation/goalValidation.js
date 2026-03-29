@@ -1,14 +1,16 @@
 const { body } = require("express-validator");
 
 const goalValidation = [
-  body("year").isInt({ min: 2000 }).withMessage("Valid year is required"),
-  body("kpas").isArray({ min: 1 }).withMessage("At least one KPA is required"),
-  body("kpas.*.title").trim().notEmpty().withMessage("KPA title is required"),
-  body("kpas.*.weight").isInt({ min: 0, max: 100 }).withMessage("KPA weight must be 0-100")
+  body("goalTitle").trim().notEmpty().withMessage("Goal title is required"),
+  body("goalDescription").optional().isString(),
+  body("weightage").isFloat({ min: 0.01, max: 100 }).withMessage("Weightage must be between 0.01 and 100"),
+  body("cycleId").optional().isUUID().withMessage("cycleId must be a valid UUID"),
+  body("year").optional().isInt({ min: 2000 }).withMessage("Valid year is required")
 ];
 
 const submitValidation = [
-  body("goalId").isMongoId().withMessage("Valid goalId is required")
+  body("cycleId").optional().isUUID().withMessage("cycleId must be a valid UUID"),
+  body("year").optional().isInt({ min: 2000 }).withMessage("Valid year is required")
 ];
 
 module.exports = { goalValidation, submitValidation };

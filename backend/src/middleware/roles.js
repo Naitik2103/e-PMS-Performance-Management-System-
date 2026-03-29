@@ -6,4 +6,6 @@ const allowRoles = (...roles) => (req, res, next) => {
   return next();
 };
 
-module.exports = { allowRoles };
+const authorizeRoles = (...roles) => allowRoles(...roles);
+
+module.exports = { allowRoles, authorizeRoles };

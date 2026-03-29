@@ -2,22 +2,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
-import { Plus, Trash2, CheckCircle, AlertCircle } from "lucide-react";
-
-const emptyKpa = { title: "", description: "", weight: 0, measures: "" };
 
 const Goals = () => {
   const { user } = useAuth();
   const [goals, setGoals] = useState([]);
-  const [form, setForm] = useState({ year: new Date().getFullYear(), kpas: [emptyKpa] });
+  const [form, setForm] = useState({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
-
-  const totalWeight = useMemo(
-    () => form.kpas.reduce((sum, kpa) => sum + Number(kpa.weight || 0), 0),
-    [form]
-  );
-  const weightOk = totalWeight === 100;
 
   const loadGoals = async () => {
     try {
@@ -43,59 +34,63 @@ const Goals = () => {
     if (user) loadGoals();
   }, [user]);
 
-  const updateKpa = (index, field, value) => {
-    const next = [...form.kpas];
-    next[index] = { ...next[index], [field]: value };
-    setForm({ ...form, kpas: next });
-  };
-
-  const addKpa = () => setForm({ ...form, kpas: [...form.kpas, { ...emptyKpa }] });
-
-  const removeKpa = (index) => {
-    const next = form.kpas.filter((_, idx) => idx !== index);
-    setForm({ ...form, kpas: next.length ? next : [{ ...emptyKpa }] });
-  };
+  const cycleTotals = useMemo(() => {
+    const map = new Map();
+    goals.forEach((goal) => {
+      const key = goal.cycleId || goal.cycle?.id || "unknown";
+      map.set(key, Number(map.get(key) || 0) + Number(goal.weightage || 0));
+    });
+    return map;
+  }, [goals]);
 
   const handleSave = async () => {
     setError("");
-    if (!weightOk) {
-      setError(`Total KPA weight must equal 100. Currently: ${totalWeight}`);
-      return;
-    }
     try {
+      const payload = {
+        year: Number(form.year),
+        goalTitle: form.goalTitle,
+        goalDescription: form.goalDescription,
+        weightage: Number(form.weightage)
+      };
       if (editingId) {
-        await apiClient.put(`/goals/${editingId}`, form);
+        await apiClient.put(`/goals/${editingId}`, payload);
       } else {
-        await apiClient.post("/goals", form);
+        await apiClient.post("/goals", payload);
       }
-      setForm({ year: new Date().getFullYear(), kpas: [{ ...emptyKpa }] });
       setEditingId(null);
+      setForm({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
       loadGoals();
     } catch (err) {
       setError(err.response?.data?.message || "Unable to save goal");
     }
   };
 
-  const handleSubmitGoal = async (goalId) => {
+  const handleSubmitGoals = async (year) => {
+    setError("");
     try {
-      await apiClient.post(`/goals/${goalId}/submit`);
+      await apiClient.post("/goals/submit", { year });
       loadGoals();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to submit goal");
+      setError(err.response?.data?.message || "Unable to submit goals");
     }
   };
 
   const handleEdit = (goal) => {
     setEditingId(goal.id);
-    setForm({ year: goal.year, kpas: goal.kpas });
+    setForm({
+      year: goal.cycle?.year || new Date().getFullYear(),
+      goalTitle: goal.goalTitle,
+      goalDescription: goal.goalDescription || "",
+      weightage: String(goal.weightage || "")
+    });
   };
 
-  const handleApprove = async (goalId, type) => {
+  const handleApprove = async (goalId, type, decision = "approve") => {
     try {
-      await apiClient.post(`/goals/${goalId}/approve/${type}`);
+      await apiClient.post(`/goals/${goalId}/approve/${type}`, { decision });
       loadGoals();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to approve goal");
+      setError(err.response?.data?.message || "Unable to process goal action");
     }
   };
 
@@ -104,88 +99,31 @@ const Goals = () => {
       {user?.role === "Employee" && (
         <div className="card">
           <div className="card-header">
-            <h2>{editingId ? "Edit Annual Goal" : "Create Annual Goal"}</h2>
+            <h2>{editingId ? "Edit Goal" : "Create Goal"}</h2>
           </div>
-
-          {/* Weight Progress Bar */}
-          <div className="weight-progress-wrap">
-            <div className="weight-progress-bar-bg">
-              <div
-                className="weight-progress-bar-fill"
-                style={{
-                  width: `${Math.min(totalWeight, 100)}%`,
-                  background: weightOk ? "#22c55e" : totalWeight > 100 ? "#ef4444" : "#2b5fbf",
-                }}
-              />
-            </div>
-            <div className={`weight-progress-label ${weightOk ? "weight-ok" : "weight-err"}`}>
-              {weightOk ? <CheckCircle size={15} /> : <AlertCircle size={15} />}
-              <span>Total Weight: {totalWeight} / 100</span>
-            </div>
-          </div>
-
           <div className="form-grid">
             <div className="form-row">
               <div>
-                <label>Year</label>
-                <input
-                  type="number"
-                  value={form.year}
-                  onChange={(e) => setForm({ ...form, year: Number(e.target.value) })}
-                />
+                <label>Cycle Year</label>
+                <input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
+              </div>
+              <div>
+                <label>Weightage</label>
+                <input type="number" min={0} max={100} value={form.weightage} onChange={(e) => setForm({ ...form, weightage: e.target.value })} />
               </div>
             </div>
-            <div className="kpa-list">
-              {form.kpas.map((kpa, index) => (
-                <div className="kpa-item" key={`kpa-${index}`}>
-                  <div className="kpa-item-header">
-                    <span className="kpa-item-num">KPA {index + 1}</span>
-                    <button className="btn-icon-danger" onClick={() => removeKpa(index)} type="button" title="Remove">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                  <div className="form-row">
-                    <div>
-                      <label>KPA Title</label>
-                      <input value={kpa.title} onChange={(e) => updateKpa(index, "title", e.target.value)} placeholder="e.g. Research Output" />
-                    </div>
-                    <div>
-                      <label>Weight (out of 100)</label>
-                      <input
-                        type="number"
-                        value={kpa.weight}
-                        onChange={(e) => updateKpa(index, "weight", Number(e.target.value))}
-                        min={0}
-                        max={100}
-                      />
-                    </div>
-                  </div>
-                  <div className="form-row">
-                    <div>
-                      <label>Description</label>
-                      <input value={kpa.description} onChange={(e) => updateKpa(index, "description", e.target.value)} placeholder="Describe the KPA" />
-                    </div>
-                    <div>
-                      <label>Measures / Targets</label>
-                      <input value={kpa.measures} onChange={(e) => updateKpa(index, "measures", e.target.value)} placeholder="How will this be measured?" />
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div>
+              <label>Goal Title</label>
+              <input value={form.goalTitle} onChange={(e) => setForm({ ...form, goalTitle: e.target.value })} />
+            </div>
+            <div>
+              <label>Goal Description (KPI)</label>
+              <textarea rows={4} value={form.goalDescription} onChange={(e) => setForm({ ...form, goalDescription: e.target.value })} />
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn secondary" type="button" onClick={addKpa}>
-                <Plus size={15} /> Add KPA
-              </button>
-              <button className="btn" type="button" onClick={handleSave} disabled={!weightOk}>
-                {editingId ? "Update Goal" : "Save Draft"}
-              </button>
-              {editingId && (
-                <button className="btn ghost" type="button" onClick={() => { setEditingId(null); setForm({ year: new Date().getFullYear(), kpas: [{ ...emptyKpa }] }); }}>
-                  Cancel
-                </button>
-              )}
+              <button className="btn" type="button" onClick={handleSave}>{editingId ? "Update" : "Save Draft"}</button>
+              <button className="btn secondary" type="button" onClick={() => handleSubmitGoals(Number(form.year))}>Submit Cycle Goals</button>
             </div>
           </div>
         </div>
@@ -200,39 +138,40 @@ const Goals = () => {
           <thead>
             <tr>
               <th>Employee</th>
-              <th>Year</th>
+              <th>Cycle</th>
+              <th>Goal</th>
+              <th>Weightage</th>
               <th>Status</th>
-              <th>Total Weight</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {goals.length === 0 && (
-              <tr><td colSpan={5} className="table-empty">No goals found.</td></tr>
+              <tr><td colSpan={6} className="table-empty">No goals found.</td></tr>
             )}
             {goals.map((goal) => (
               <tr key={goal.id}>
                 <td>{goal.employee?.name || "Self"}</td>
-                <td>{goal.year}</td>
+                <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
+                <td>{goal.goalTitle}</td>
+                <td>{Number(goal.weightage).toFixed(2)}</td>
                 <td><StatusBadge status={goal.status} /></td>
                 <td>
-                  <span className={goal.totalWeight === 100 ? "weight-chip-ok" : "weight-chip-err"}>
-                    {goal.totalWeight}
-                  </span>
-                </td>
-                <td>
                   <div className="table-actions">
-                    {user?.role === "Employee" && goal.status === "draft" && (
-                      <>
-                        <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
-                        <button className="btn" type="button" onClick={() => handleSubmitGoal(goal.id)}>Submit</button>
-                      </>
+                    {user?.role === "Employee" && ["draft", "returned"].includes(goal.status) && (
+                      <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
                     )}
                     {user?.role === "ReportingOfficer" && (
-                      <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro")}>Approve</button>
+                      <>
+                        <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
+                        <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
+                      </>
                     )}
                     {user?.role === "ReviewingOfficer" && (
-                      <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review")}>Approve</button>
+                      <>
+                        <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
+                        <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -240,6 +179,11 @@ const Goals = () => {
             ))}
           </tbody>
         </table>
+        {user?.role === "Employee" && (
+          <div className="muted" style={{ paddingTop: 12 }}>
+            Current cycle total weightage: {Array.from(cycleTotals.values())[0]?.toFixed?.(2) || "0.00"} / 100.00
+          </div>
+        )}
       </div>
     </div>
   );

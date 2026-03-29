@@ -1,32 +1,48 @@
-const { SixMonthTracking, Goal, User } = require("../models");
+const { SixMonthReview, Goal, User } = require("../models");
+const { writeAudit } = require("../services/auditService");
+const { notifyUser } = require("../services/notificationService");
 
 const upsertTracking = async (req, res, next) => {
   try {
-    const { goalId, year, period, progressEntries } = req.body;
+    const { goalId, cycleId, period, progressText } = req.body;
     const goal = await Goal.findByPk(goalId);
-    if (!goal || goal.employeeId !== req.user.id) {
+    if (!goal || goal.userId !== req.user.id) {
       res.status(404);
       return next(new Error("Goal not found for this employee"));
     }
 
-    const existing = await SixMonthTracking.findOne({
-      where: { employeeId: req.user.id, goalId, year, period }
-    });
-    let tracking;
+    const existing = await SixMonthReview.findOne({ where: { employeeId: req.user.id, goalId, cycleId: cycleId || goal.cycleId, period } });
+    let review;
     if (existing) {
-      tracking = await existing.update({ progressEntries, status: "open" });
+      existing.progressText = progressText;
+      existing.submittedAt = new Date();
+      review = await existing.save();
+      await writeAudit({ user: req.user, action: "update", entity: "six_month_review", entityId: review.id });
     } else {
-      tracking = await SixMonthTracking.create({
+      review = await SixMonthReview.create({
         employeeId: req.user.id,
         goalId,
-        year,
+        cycleId: cycleId || goal.cycleId,
         period,
-        progressEntries,
-        status: "open"
+        progressText,
+        submittedAt: new Date()
+      });
+      await writeAudit({ user: req.user, action: "submit", entity: "six_month_review", entityId: review.id });
+    }
+
+    const employee = await User.findByPk(req.user.id, { attributes: ["name", "reportingTo"] });
+    if (employee?.reportingTo) {
+      await notifyUser({
+        userId: employee.reportingTo,
+        title: "Six-Month Review Submitted",
+        message: `${employee.name} submitted ${period} tracking for goal review.`,
+        type: "tracking_submission",
+        entity: "six_month_review",
+        entityId: review.id
       });
     }
 
-    return res.json(tracking);
+    return res.json(review);
   } catch (error) {
     return next(error);
   }
@@ -34,8 +50,8 @@ const upsertTracking = async (req, res, next) => {
 
 const addRoRemarks = async (req, res, next) => {
   try {
-    const { trackingId, roRemarks } = req.body;
-    const tracking = await SixMonthTracking.findByPk(trackingId, {
+    const { trackingId, reportingRemarks } = req.body;
+    const tracking = await SixMonthReview.findByPk(trackingId, {
       include: [{ model: User, as: "employee", attributes: ["id", "reportingTo"] }]
     });
     if (!tracking) {
@@ -48,9 +64,19 @@ const addRoRemarks = async (req, res, next) => {
       return next(new Error("Access denied for this tracking record"));
     }
 
-    tracking.roRemarks = roRemarks;
-    tracking.status = "ro_remarked";
+    tracking.reportingRemarks = reportingRemarks;
+    tracking.remarkedAt = new Date();
     await tracking.save();
+
+    await writeAudit({ user: req.user, action: "remark", entity: "six_month_review", entityId: tracking.id });
+    await notifyUser({
+      userId: tracking.employeeId,
+      title: "Tracking Remark Added",
+      message: "Reporting Officer has added remarks to your six-month tracking.",
+      type: "tracking_review",
+      entity: "six_month_review",
+      entityId: tracking.id
+    });
 
     return res.json(tracking);
   } catch (error) {
@@ -60,12 +86,12 @@ const addRoRemarks = async (req, res, next) => {
 
 const listMyTracking = async (req, res, next) => {
   try {
-    const tracking = await SixMonthTracking.findAll({
+    const reviews = await SixMonthReview.findAll({
       where: { employeeId: req.user.id },
-      include: [{ model: Goal, as: "goal", attributes: ["id", "year", "status"] }],
+      include: [{ model: Goal, as: "goal", attributes: ["id", "goalTitle", "weightage", "status"] }],
       order: [["updatedAt", "DESC"]]
     });
-    return res.json(tracking);
+    return res.json(reviews);
   } catch (error) {
     return next(error);
   }
@@ -75,7 +101,7 @@ const listTeamTracking = async (req, res, next) => {
   try {
     const reports = await User.findAll({ where: { reportingTo: req.user.id }, attributes: ["id"] });
     const reportIds = reports.map((report) => report.id);
-    const tracking = await SixMonthTracking.findAll({
+    const tracking = await SixMonthReview.findAll({
       where: { employeeId: reportIds },
       include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }],
       order: [["updatedAt", "DESC"]]

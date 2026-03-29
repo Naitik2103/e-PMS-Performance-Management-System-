@@ -1,17 +1,15 @@
 const { body } = require("express-validator");
 
 const trackingValidation = [
-  body("goalId").isMongoId().withMessage("Valid goalId is required"),
-  body("year").isInt({ min: 2000 }).withMessage("Valid year is required"),
+  body("goalId").isUUID().withMessage("Valid goalId is required"),
+  body("cycleId").optional().isUUID().withMessage("Valid cycleId is required"),
   body("period").isIn(["H1", "H2"]).withMessage("Period must be H1 or H2"),
-  body("progressEntries").isArray({ min: 1 }).withMessage("Progress entries are required"),
-  body("progressEntries.*.kpaTitle").trim().notEmpty().withMessage("KPA title is required"),
-  body("progressEntries.*.progress").trim().notEmpty().withMessage("Progress is required")
+  body("progressText").trim().notEmpty().withMessage("Progress text is required")
 ];
 
-const roRemarkValidation = [
-  body("trackingId").isMongoId().withMessage("Valid trackingId is required"),
-  body("roRemarks").trim().notEmpty().withMessage("Remarks are required")
+const reportingRemarkValidation = [
+  body("trackingId").isUUID().withMessage("Valid trackingId is required"),
+  body("reportingRemarks").trim().notEmpty().withMessage("Remarks are required")
 ];
 
-module.exports = { trackingValidation, roRemarkValidation };
+module.exports = { trackingValidation, reportingRemarkValidation };
