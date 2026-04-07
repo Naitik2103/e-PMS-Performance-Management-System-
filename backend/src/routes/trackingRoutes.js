@@ -1,15 +1,16 @@
-const express = require("express");
-const { upsertTracking, addRoRemarks, listMyTracking, listTeamTracking } = require("../controllers/trackingController");
-const { trackingValidation, reportingRemarkValidation } = require("../validation/trackingValidation");
-const { validate } = require("../middleware/validate");
-const { protect } = require("../middleware/auth");
-const { authorizeRoles } = require("../middleware/roles");
+import express from "express";
+import { upsertTracking, addRoRemarks, listMyTracking, listTeamTracking } from "../controllers/trackingController.js";
+import { trackingValidation, reportingRemarkValidation } from "../validation/trackingValidation.js";
+import { validate } from "../middleware/validate.js";
+import { protect } from "../middleware/auth.js";
+import { authorizeRoles } from "../middleware/roles.js";
+import { ROLES } from "../constants/rbac.js";
 
 const router = express.Router();
 
-router.get("/my", protect, authorizeRoles("Employee"), listMyTracking);
-router.get("/team", protect, authorizeRoles("ReportingOfficer"), listTeamTracking);
-router.post("/", protect, authorizeRoles("Employee"), trackingValidation, validate, upsertTracking);
-router.post("/remarks", protect, authorizeRoles("ReportingOfficer"), reportingRemarkValidation, validate, addRoRemarks);
+router.get("/my", protect, authorizeRoles(ROLES.EMPLOYEE), listMyTracking);
+router.get("/team", protect, authorizeRoles(ROLES.REPORTING_OFFICER), listTeamTracking);
+router.post("/", protect, authorizeRoles(ROLES.EMPLOYEE), trackingValidation, validate, upsertTracking);
+router.post("/remarks", protect, authorizeRoles(ROLES.REPORTING_OFFICER), reportingRemarkValidation, validate, addRoRemarks);
 
-module.exports = router;
+export default router;

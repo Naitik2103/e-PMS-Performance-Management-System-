@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { apiClient } from "../api/client";
+import { normalizeRole } from "../constants/rbac";
 
 const AuthContext = createContext(null);
 
@@ -15,7 +16,8 @@ export const AuthProvider = ({ children }) => {
     }
     try {
       const response = await apiClient.get("/auth/me");
-      setUser(response.data.user);
+      const nextUser = response.data.user ? { ...response.data.user, role: normalizeRole(response.data.user.role) } : null;
+      setUser(nextUser);
     } catch (error) {
       localStorage.removeItem("epms_token");
     } finally {
@@ -30,8 +32,9 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await apiClient.post("/auth/login", { email, password });
     localStorage.setItem("epms_token", response.data.token);
-    setUser(response.data.user);
-    return response.data.user;
+    const nextUser = response.data.user ? { ...response.data.user, role: normalizeRole(response.data.user.role) } : null;
+    setUser(nextUser);
+    return nextUser;
   };
 
   const logout = () => {

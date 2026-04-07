@@ -1,3 +1,3 @@
-const { SixMonthTracking } = require("./index");
+import { SixMonthTracking } from "./index.js";
 
-module.exports = SixMonthTracking;
+export default SixMonthTracking;

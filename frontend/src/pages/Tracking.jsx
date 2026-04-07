@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { ROLES } from "../constants/rbac";
 
 const Tracking = () => {
   const { user } = useAuth();
@@ -12,7 +13,7 @@ const Tracking = () => {
 
   const loadData = async () => {
     try {
-      if (user?.role === "Employee") {
+      if (user?.role === ROLES.EMPLOYEE) {
         const [trackingRes, goalsRes] = await Promise.all([apiClient.get("/tracking/my"), apiClient.get("/goals/my")]);
         setTracking(trackingRes.data);
         setGoals(goalsRes.data);
@@ -20,7 +21,7 @@ const Tracking = () => {
           setForm((prev) => ({ ...prev, goalId: goalsRes.data[0].id, cycleId: goalsRes.data[0].cycleId || goalsRes.data[0].cycle?.id || "" }));
         }
       }
-      if (user?.role === "ReportingOfficer") {
+      if (user?.role === ROLES.REPORTING_OFFICER) {
         const trackingRes = await apiClient.get("/tracking/team");
         setTracking(trackingRes.data);
       }
@@ -56,7 +57,7 @@ const Tracking = () => {
 
   return (
     <div className="page-content">
-      {user?.role === "Employee" && (
+      {user?.role === ROLES.EMPLOYEE && (
         <div className="card">
           <div className="card-header">
             <h2>Submit Six-Month Tracking</h2>
@@ -124,7 +125,7 @@ const Tracking = () => {
                 <td>{record.progressText}</td>
                 <td>{record.reportingRemarks || <span className="muted">-</span>}</td>
                 <td>
-                  {user?.role === "ReportingOfficer" && (
+                  {user?.role === ROLES.REPORTING_OFFICER && (
                     <div className="inline-form-short">
                       <input
                         placeholder="Add remarks..."

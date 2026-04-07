@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
+import { ROLES } from "../constants/rbac";
 
 const Reviews = () => {
   const { user } = useAuth();
@@ -13,7 +14,7 @@ const Reviews = () => {
 
   const loadReviews = async () => {
     try {
-      if (user?.role === "Employee") {
+      if (user?.role === ROLES.EMPLOYEE) {
         const response = await apiClient.get("/reviews/my");
         setReviews(response.data);
       } else {
@@ -64,7 +65,7 @@ const Reviews = () => {
 
   return (
     <div className="page-content">
-      {user?.role === "Employee" && (
+      {user?.role === ROLES.EMPLOYEE && (
         <div className="card">
           <div className="card-header">
             <h2>Self Appraisal</h2>
@@ -121,7 +122,7 @@ const Reviews = () => {
                 <td><StatusBadge status={review.status} /></td>
                 <td>{review.finalScore ? Number(review.finalScore).toFixed(2) : "-"}</td>
                 <td>
-                  {user?.role === "ReportingOfficer" && (
+                  {user?.role === ROLES.REPORTING_OFFICER && (
                     <div className="inline-form">
                       <input
                         type="number"
@@ -139,7 +140,7 @@ const Reviews = () => {
                       <button className="btn" type="button" onClick={() => submitRating(review.id)}>Submit</button>
                     </div>
                   )}
-                  {user?.role === "ReviewingOfficer" && (
+                  {user?.role === ROLES.REVIEWING_OFFICER && (
                     <div className="inline-form-short">
                       <input
                         placeholder="Remarks"
@@ -149,7 +150,7 @@ const Reviews = () => {
                       <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/review-approve")}>Approve</button>
                     </div>
                   )}
-                  {user?.role === "AcceptingOfficer" && (
+                  {user?.role === ROLES.ACCEPTING_OFFICER && (
                     <div className="inline-form-short">
                       <input
                         placeholder="Final remarks"

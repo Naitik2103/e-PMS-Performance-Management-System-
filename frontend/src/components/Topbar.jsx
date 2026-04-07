@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Bell, ChevronDown } from "lucide-react";
 import { apiClient } from "../api/client";
+import { roleLabel } from "../constants/rbac";
 
 const pageTitles = {
   "/dashboard": "Dashboard",
@@ -10,6 +11,10 @@ const pageTitles = {
   "/reviewing-dashboard": "Dashboard",
   "/accepting-dashboard": "Dashboard",
   "/admin-dashboard": "Admin Panel",
+  "/admin/create-user": "Create New User",
+  "/admin/cycles": "Appraisal Cycle Management",
+  "/admin/all-users": "All Users",
+  "/admin/hierarchy": "Reporting Hierarchy",
   "/goals": "Annual Goal Setting",
   "/tracking": "Six-Month Tracking",
   "/reviews": "Year-End Reviews",
@@ -65,9 +70,7 @@ const Topbar = () => {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const roleLabel = user?.role
-    ? user.role.replace(/([A-Z])/g, " $1").trim()
-    : "User";
+  const currentRoleLabel = roleLabel(user?.role);
 
   const markAsRead = async (id) => {
     try {
@@ -121,7 +124,7 @@ const Topbar = () => {
             </div>
             <div>
               <div className="topbar-name">{user?.name}</div>
-              <div className="topbar-role">{roleLabel}</div>
+              <div className="topbar-role">{currentRoleLabel}</div>
             </div>
             <ChevronDown size={14} className={`topbar-profile-chevron${profileOpen ? " open" : ""}`} />
           </button>
@@ -134,7 +137,7 @@ const Topbar = () => {
                 <div>
                   <div className="topbar-profile-name">{user?.name || "User"}</div>
                   <div className="topbar-profile-sub">{user?.email || "No email"}</div>
-                  <div className="topbar-profile-role-chip">{roleLabel}</div>
+                  <div className="topbar-profile-role-chip">{currentRoleLabel}</div>
                 </div>
               </div>
               <div className="topbar-profile-info-list">

@@ -1,4 +1,4 @@
-const { AuditLog } = require("../models");
+import { AuditLog } from "../models.js";
 
 const writeAudit = async ({ user, action, entity, entityId = null, details = null, transaction = undefined }) => {
   return AuditLog.create(
@@ -14,4 +14,4 @@ const writeAudit = async ({ user, action, entity, entityId = null, details = nul
   );
 };
 
-module.exports = { writeAudit };
+export { writeAudit };

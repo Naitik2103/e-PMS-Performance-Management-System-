@@ -9,6 +9,11 @@ import Goals from "./pages/Goals";
 import Tracking from "./pages/Tracking";
 import Reviews from "./pages/Reviews";
 import Admin from "./pages/Admin";
+import CreateNewUserPage from "./pages/admin/CreateNewUserPage";
+import AppraisalCycleManagementPage from "./pages/admin/AppraisalCycleManagementPage";
+import AllUsersPage from "./pages/admin/AllUsersPage";
+import ReportingHierarchyPage from "./pages/admin/ReportingHierarchyPage";
+import { ROLES } from "./constants/rbac";
 
 const App = () => {
   return (
@@ -29,9 +34,59 @@ const App = () => {
         }
       />
       <Route
+        path="/dashboard/employee"
+        element={
+          <ProtectedRoute allowedRoles={[ROLES.EMPLOYEE]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ro"
+        element={
+          <ProtectedRoute allowedRoles={[ROLES.REPORTING_OFFICER]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/revo"
+        element={
+          <ProtectedRoute allowedRoles={[ROLES.REVIEWING_OFFICER]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/ao"
+        element={
+          <ProtectedRoute allowedRoles={[ROLES.ACCEPTING_OFFICER]}>
+            <Layout>
+              <Dashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/admin"
+        element={
+          <ProtectedRoute allowedRoles={[ROLES.HR_ADMIN]}>
+            <Layout>
+              <Admin />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/reporting-dashboard"
         element={
-          <ProtectedRoute roles={["ReportingOfficer"]}>
+          <ProtectedRoute roles={[ROLES.REPORTING_OFFICER]}>
             <Layout>
               <Dashboard />
             </Layout>
@@ -41,7 +96,7 @@ const App = () => {
       <Route
         path="/reviewing-dashboard"
         element={
-          <ProtectedRoute roles={["ReviewingOfficer"]}>
+          <ProtectedRoute roles={[ROLES.REVIEWING_OFFICER]}>
             <Layout>
               <Dashboard />
             </Layout>
@@ -51,7 +106,7 @@ const App = () => {
       <Route
         path="/accepting-dashboard"
         element={
-          <ProtectedRoute roles={["AcceptingOfficer"]}>
+          <ProtectedRoute roles={[ROLES.ACCEPTING_OFFICER]}>
             <Layout>
               <Dashboard />
             </Layout>
@@ -61,9 +116,49 @@ const App = () => {
       <Route
         path="/admin-dashboard"
         element={
-          <ProtectedRoute roles={["Admin"]}>
+          <ProtectedRoute roles={[ROLES.HR_ADMIN]}>
             <Layout>
               <Admin />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/create-user"
+        element={
+          <ProtectedRoute roles={[ROLES.HR_ADMIN]}>
+            <Layout>
+              <CreateNewUserPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/cycles"
+        element={
+          <ProtectedRoute roles={[ROLES.HR_ADMIN]}>
+            <Layout>
+              <AppraisalCycleManagementPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/all-users"
+        element={
+          <ProtectedRoute roles={[ROLES.HR_ADMIN]}>
+            <Layout>
+              <AllUsersPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/hierarchy"
+        element={
+          <ProtectedRoute roles={[ROLES.HR_ADMIN]}>
+            <Layout>
+              <ReportingHierarchyPage />
             </Layout>
           </ProtectedRoute>
         }

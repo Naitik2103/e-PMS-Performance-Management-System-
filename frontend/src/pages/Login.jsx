@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { ROLES } from "../constants/rbac";
 
 const Login = () => {
   const { login } = useAuth();
@@ -11,11 +12,11 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   const roleRedirects = {
-    Employee: "/dashboard",
-    ReportingOfficer: "/reporting-dashboard",
-    ReviewingOfficer: "/reviewing-dashboard",
-    AcceptingOfficer: "/accepting-dashboard",
-    Admin: "/admin-dashboard",
+    [ROLES.EMPLOYEE]: "/dashboard/employee",
+    [ROLES.REPORTING_OFFICER]: "/dashboard/ro",
+    [ROLES.REVIEWING_OFFICER]: "/dashboard/revo",
+    [ROLES.ACCEPTING_OFFICER]: "/dashboard/ao",
+    [ROLES.HR_ADMIN]: "/dashboard/admin",
   };
 
   const handleSubmit = async (event) => {
@@ -28,7 +29,7 @@ const Login = () => {
         navigate(roleRedirects[user.role] || "/dashboard");
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Login failed");
+      setError(err.response?.data?.error || err.response?.data?.message || "Login failed");
     } finally {
       setLoading(false);
     }

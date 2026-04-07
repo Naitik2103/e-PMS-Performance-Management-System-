@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
+import { ROLES } from "../constants/rbac";
 
 const Goals = () => {
   const { user } = useAuth();
@@ -12,13 +13,13 @@ const Goals = () => {
 
   const loadGoals = async () => {
     try {
-      if (user?.role === "Employee") {
+      if (user?.role === ROLES.EMPLOYEE) {
         const response = await apiClient.get("/goals/my");
         setGoals(response.data);
-      } else if (user?.role === "ReportingOfficer") {
+      } else if (user?.role === ROLES.REPORTING_OFFICER) {
         const response = await apiClient.get("/goals/pending/ro");
         setGoals(response.data);
-      } else if (user?.role === "ReviewingOfficer") {
+      } else if (user?.role === ROLES.REVIEWING_OFFICER) {
         const response = await apiClient.get("/goals/pending/review");
         setGoals(response.data);
       } else {
@@ -53,7 +54,7 @@ const Goals = () => {
         weightage: Number(form.weightage)
       };
       if (editingId) {
-        await apiClient.put(`/goals/${editingId}`, payload);
+        await apiClient.put(`/goals/goal/${editingId}`, payload);
       } else {
         await apiClient.post("/goals", payload);
       }
@@ -96,7 +97,7 @@ const Goals = () => {
 
   return (
     <div className="page-content">
-      {user?.role === "Employee" && (
+      {user?.role === ROLES.EMPLOYEE && (
         <div className="card">
           <div className="card-header">
             <h2>{editingId ? "Edit Goal" : "Create Goal"}</h2>
@@ -158,16 +159,16 @@ const Goals = () => {
                 <td><StatusBadge status={goal.status} /></td>
                 <td>
                   <div className="table-actions">
-                    {user?.role === "Employee" && ["draft", "returned"].includes(goal.status) && (
+                    {user?.role === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
                       <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
                     )}
-                    {user?.role === "ReportingOfficer" && (
+                    {user?.role === ROLES.REPORTING_OFFICER && (
                       <>
                         <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
                         <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
                       </>
                     )}
-                    {user?.role === "ReviewingOfficer" && (
+                    {user?.role === ROLES.REVIEWING_OFFICER && (
                       <>
                         <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
                         <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
@@ -179,7 +180,7 @@ const Goals = () => {
             ))}
           </tbody>
         </table>
-        {user?.role === "Employee" && (
+        {user?.role === ROLES.EMPLOYEE && (
           <div className="muted" style={{ paddingTop: 12 }}>
             Current cycle total weightage: {Array.from(cycleTotals.values())[0]?.toFixed?.(2) || "0.00"} / 100.00
           </div>

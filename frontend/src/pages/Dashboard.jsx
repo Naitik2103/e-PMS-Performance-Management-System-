@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { apiClient } from "../api/client";
 import { Target, BarChart2, ClipboardList, TrendingUp, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { ROLES, roleLabel } from "../constants/rbac";
 
 const Dashboard = () => {
   const { user } = useAuth();
@@ -12,14 +13,14 @@ const Dashboard = () => {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        if (user?.role === "Employee") {
+        if (user?.role === ROLES.EMPLOYEE) {
           const [goals, tracking, reviews] = await Promise.all([
             apiClient.get("/goals/my"),
             apiClient.get("/tracking/my"),
             apiClient.get("/reviews/my"),
           ]);
           setStats({ goals: goals.data.length, tracking: tracking.data.length, reviews: reviews.data.length, status: "Active" });
-        } else if (user?.role === "ReportingOfficer") {
+        } else if (user?.role === ROLES.REPORTING_OFFICER) {
           const [goals, tracking, reviews] = await Promise.all([
             apiClient.get("/goals/pending/ro"),
             apiClient.get("/tracking/team"),
@@ -87,7 +88,7 @@ const Dashboard = () => {
           <h2 className="welcome-title">Welcome back, {user?.name?.split(" ")[0]} 👋</h2>
           <p className="welcome-sub">Here is an overview of your performance management activity.</p>
         </div>
-        <div className="welcome-badge">{user?.role?.replace(/([A-Z])/g, " $1").trim()}</div>
+        <div className="welcome-badge">{roleLabel(user?.role)}</div>
       </div>
 
       {/* Stat Cards */}
@@ -125,7 +126,7 @@ const Dashboard = () => {
         </div>
         <p style={{ color: "var(--grey-600)", lineHeight: 1.7 }}>
           This dashboard shows a summary of your performance management activity. Use the sidebar
-          navigation to access Goals, Tracking, and Reviews. Your role is <strong>{user?.role?.replace(/([A-Z])/g, " $1").trim()}</strong>,
+          navigation to access Goals, Tracking, and Reviews. Your role is <strong>{roleLabel(user?.role)}</strong>,
           which determines what actions you can take in the system.
         </p>
       </div>

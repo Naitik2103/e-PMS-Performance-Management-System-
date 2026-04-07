@@ -1,16 +1,23 @@
-const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
-const dotenv = require("dotenv");
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import dotenv from "dotenv";
 
-const authRoutes = require("./routes/authRoutes");
-const userRoutes = require("./routes/userRoutes");
-const goalRoutes = require("./routes/goalRoutes");
-const trackingRoutes = require("./routes/trackingRoutes");
-const reviewRoutes = require("./routes/reviewRoutes");
-const notificationRoutes = require("./routes/notificationRoutes");
-const adminRoutes = require("./routes/adminRoutes");
-const { notFound, errorHandler } = require("./middleware/errorHandler");
+import authRoutes from "./routes/authRoutes.js";
+import authRoutesV2 from "./routes/auth.js";
+import userRoutes from "./routes/userRoutes.js";
+import goalRoutes from "./routes/goalRoutes.js";
+import goalsRoutesV2 from "./routes/goals.js";
+import trackingRoutes from "./routes/trackingRoutes.js";
+import sixMonthRoutesV2 from "./routes/sixMonthReview.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
+import selfAppraisalRoutesV2 from "./routes/selfAppraisal.js";
+import ratingsRoutesV2 from "./routes/ratings.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import adminRoutesV2 from "./routes/admin.js";
+import appraisalRoutes from "./routes/appraisalRoutes.js";
+import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 dotenv.config();
 
@@ -24,15 +31,22 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", message: "e-PMS API" });
 });
 
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authRoutesV2);
+app.use("/api/legacy/auth", authRoutes);
 app.use("/api/users", userRoutes);
-app.use("/api/goals", goalRoutes);
+app.use("/api/goals", goalsRoutesV2);
+app.use("/api/legacy/goals", goalRoutes);
 app.use("/api/tracking", trackingRoutes);
+app.use("/api/six-month-review", sixMonthRoutesV2);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/self-appraisal", selfAppraisalRoutesV2);
+app.use("/api/ratings", ratingsRoutesV2);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/admin", adminRoutes);
+app.use("/api/admin", adminRoutesV2);
+app.use("/api/legacy/admin", adminRoutes);
+app.use("/api/appraisals", appraisalRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

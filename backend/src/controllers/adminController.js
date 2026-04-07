@@ -1,5 +1,7 @@
-const { AppraisalCycle, QuantitativeAttributeMaster, User } = require("../models");
-const { writeAudit } = require("../services/auditService");
+import { Op } from "sequelize";
+import { AppraisalCycle, QuantitativeAttributeMaster, User } from "../models.js";
+import { writeAudit } from "../services/auditService.js";
+import { normalizeRole } from "../constants/rbac.js";
 
 const listCycles = async (req, res, next) => {
   try {
@@ -12,9 +14,19 @@ const listCycles = async (req, res, next) => {
 
 const createCycle = async (req, res, next) => {
   try {
-    const cycle = await AppraisalCycle.create(req.body);
+    const existing = await AppraisalCycle.findOne({ where: { year: req.body.year } });
+    if (existing) {
+      res.status(409);
+      return next(new Error("An appraisal cycle already exists for this year"));
+    }
+    const payload = {
+      ...req.body,
+      startDate: req.body.goalSettingStart || req.body.startDate,
+      endDate: req.body.annualAppraisalEnd || req.body.endDate
+    };
+    const cycle = await AppraisalCycle.create(payload);
     if (cycle.isActive) {
-      await AppraisalCycle.update({ isActive: false, status: "closed" }, { where: { id: { [require("sequelize").Op.ne]: cycle.id }, isActive: true } });
+      await AppraisalCycle.update({ isActive: false, status: "closed" }, { where: { id: { [Op.ne]: cycle.id }, isActive: true } });
       cycle.status = "active";
       await cycle.save();
     }
@@ -32,9 +44,21 @@ const updateCycle = async (req, res, next) => {
       res.status(404);
       return next(new Error("Cycle not found"));
     }
-    await cycle.update(req.body);
+    if (req.body.year && req.body.year !== cycle.year) {
+      const duplicate = await AppraisalCycle.findOne({ where: { year: req.body.year } });
+      if (duplicate && duplicate.id !== cycle.id) {
+        res.status(409);
+        return next(new Error("An appraisal cycle already exists for this year"));
+      }
+    }
+    const payload = {
+      ...req.body,
+      startDate: req.body.goalSettingStart || req.body.startDate || cycle.startDate,
+      endDate: req.body.annualAppraisalEnd || req.body.endDate || cycle.endDate
+    };
+    await cycle.update(payload);
     if (cycle.isActive) {
-      await AppraisalCycle.update({ isActive: false, status: "closed" }, { where: { id: { [require("sequelize").Op.ne]: cycle.id }, isActive: true } });
+      await AppraisalCycle.update({ isActive: false, status: "closed" }, { where: { id: { [Op.ne]: cycle.id }, isActive: true } });
       cycle.status = "active";
       await cycle.save();
     }
@@ -86,7 +110,7 @@ const roleAssignment = async (req, res, next) => {
       res.status(404);
       return next(new Error("User not found"));
     }
-    user.role = req.body.role;
+    user.role = normalizeRole(req.body.role);
     user.reportingTo = req.body.reportingTo === "" ? null : req.body.reportingTo;
     await user.save();
     await writeAudit({ user: req.user, action: "update", entity: "user_role", entityId: user.id, details: { role: user.role } });
@@ -96,7 +120,7 @@ const roleAssignment = async (req, res, next) => {
   }
 };
 
-module.exports = {
+export {
   listCycles,
   createCycle,
   updateCycle,

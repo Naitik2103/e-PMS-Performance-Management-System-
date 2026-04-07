@@ -1,4 +1,4 @@
-const { body } = require("express-validator");
+import { body } from "express-validator";
 
 const trackingValidation = [
   body("goalId").isUUID().withMessage("Valid goalId is required"),
@@ -12,4 +12,4 @@ const reportingRemarkValidation = [
   body("reportingRemarks").trim().notEmpty().withMessage("Remarks are required")
 ];
 
-module.exports = { trackingValidation, reportingRemarkValidation };
+export { trackingValidation, reportingRemarkValidation };

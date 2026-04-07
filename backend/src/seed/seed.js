@@ -1,6 +1,7 @@
-const dotenv = require("dotenv");
-const { connectDb } = require("../config/db");
-const { sequelize, User, AppraisalCycle, QuantitativeAttributeMaster } = require("../models");
+import dotenv from "dotenv";
+import { connectDb } from "../config/db.js";
+import { sequelize, User, AppraisalCycle, QuantitativeAttributeMaster } from "../models.js";
+import { ROLES } from "../constants/rbac.js";
 
 dotenv.config();
 
@@ -16,44 +17,54 @@ const seed = async () => {
     const employeePassword = await User.hashPassword("Password123!");
 
     const admin = await User.create({
+      firstName: "System",
+      lastName: "Admin",
       name: "System Admin",
       email: "admin@epms.local",
       passwordHash: adminPassword,
-      role: "Admin",
+      role: ROLES.HR_ADMIN,
       department: "Administration"
     });
 
     const acceptingOfficer = await User.create({
+      firstName: "Ava",
+      lastName: "Accept",
       name: "Ava Accept",
       email: "accepting@epms.local",
       passwordHash: acceptingPassword,
-      role: "AcceptingOfficer",
+      role: ROLES.ACCEPTING_OFFICER,
       department: "Central Office"
     });
 
     const reviewingOfficer = await User.create({
+      firstName: "Riya",
+      lastName: "Review",
       name: "Riya Review",
       email: "reviewing@epms.local",
       passwordHash: reviewingPassword,
-      role: "ReviewingOfficer",
+      role: ROLES.REVIEWING_OFFICER,
       department: "Central Office",
       reportingTo: acceptingOfficer.id
     });
 
     const reportingOfficer = await User.create({
+      firstName: "Rohan",
+      lastName: "Report",
       name: "Rohan Report",
       email: "reporting@epms.local",
       passwordHash: reportingPassword,
-      role: "ReportingOfficer",
+      role: ROLES.REPORTING_OFFICER,
       department: "Computer Science",
       reportingTo: reviewingOfficer.id
     });
 
     const employee = await User.create({
+      firstName: "Emma",
+      lastName: "Employee",
       name: "Emma Employee",
       email: "employee@epms.local",
       passwordHash: employeePassword,
-      role: "Employee",
+      role: ROLES.EMPLOYEE,
       department: "Computer Science",
       reportingTo: reportingOfficer.id
     });
@@ -64,6 +75,12 @@ const seed = async () => {
       year,
       startDate: `${year}-01-01`,
       endDate: `${year}-12-31`,
+      goalSettingStart: `${year}-01-01`,
+      goalSettingEnd: `${year}-01-31`,
+      sixMonthProgressReviewStart: `${year}-06-01`,
+      sixMonthProgressReviewEnd: `${year}-06-30`,
+      annualAppraisalStart: `${year}-11-01`,
+      annualAppraisalEnd: `${year}-12-31`,
       isActive: true,
       status: "active"
     });

@@ -1,8 +1,23 @@
-const { body } = require("express-validator");
+import { body } from "express-validator";
 
 const loginValidation = [
-  body("email").isEmail().withMessage("Valid email is required"),
+  body("email")
+    .optional()
+    .isEmail()
+    .withMessage("Valid email is required"),
+  body("employee_id")
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("employee_id must be a non-empty string"),
+  body().custom((value) => {
+    if (!value?.email && !value?.employee_id) {
+      throw new Error("Either email or employee_id is required");
+    }
+    return true;
+  }),
   body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters")
 ];
 
-module.exports = { loginValidation };
+export { loginValidation };

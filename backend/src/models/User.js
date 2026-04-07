@@ -1,3 +1,3 @@
-const { User } = require("./index");
+import { User } from "./index.js";
 
-module.exports = User;
+export default User;

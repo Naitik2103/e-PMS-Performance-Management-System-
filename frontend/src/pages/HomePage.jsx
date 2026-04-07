@@ -1,13 +1,14 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { ROLES } from "../constants/rbac";
 
 const roleHomeMap = {
-  Employee: "/dashboard",
-  ReportingOfficer: "/reporting-dashboard",
-  ReviewingOfficer: "/reviewing-dashboard",
-  AcceptingOfficer: "/accepting-dashboard",
-  Admin: "/admin-dashboard",
+  [ROLES.EMPLOYEE]: "/dashboard",
+  [ROLES.REPORTING_OFFICER]: "/reporting-dashboard",
+  [ROLES.REVIEWING_OFFICER]: "/reviewing-dashboard",
+  [ROLES.ACCEPTING_OFFICER]: "/accepting-dashboard",
+  [ROLES.HR_ADMIN]: "/admin-dashboard",
 };
 
 const features = [

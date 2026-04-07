@@ -1,4 +1,4 @@
-const { body } = require("express-validator");
+import { body } from "express-validator";
 
 const selfSummaryValidation = [
   body("cycleId").optional().isUUID().withMessage("cycleId must be valid UUID"),
@@ -26,4 +26,4 @@ const remarkValidation = [
   body("remarks").trim().notEmpty().withMessage("Remarks are required")
 ];
 
-module.exports = { selfSummaryValidation, roRatingValidation, remarkValidation };
+export { selfSummaryValidation, roRatingValidation, remarkValidation };

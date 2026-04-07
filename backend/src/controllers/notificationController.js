@@ -1,4 +1,4 @@
-const { Notification } = require("../models");
+import { Notification } from "../models.js";
 
 const listMyNotifications = async (req, res, next) => {
   try {
@@ -39,4 +39,4 @@ const markAsRead = async (req, res, next) => {
   }
 };
 
-module.exports = { listMyNotifications, unreadCount, markAsRead };
+export { listMyNotifications, unreadCount, markAsRead };

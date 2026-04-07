@@ -1,6 +1,6 @@
-const { SixMonthReview, Goal, User } = require("../models");
-const { writeAudit } = require("../services/auditService");
-const { notifyUser } = require("../services/notificationService");
+import { SixMonthReview, Goal, User } from "../models.js";
+import { writeAudit } from "../services/auditService.js";
+import { notifyUser } from "../services/notificationService.js";
 
 const upsertTracking = async (req, res, next) => {
   try {
@@ -112,4 +112,4 @@ const listTeamTracking = async (req, res, next) => {
   }
 };
 
-module.exports = { upsertTracking, addRoRemarks, listMyTracking, listTeamTracking };
+export { upsertTracking, addRoRemarks, listMyTracking, listTeamTracking };

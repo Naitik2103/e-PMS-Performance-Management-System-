@@ -1,26 +1,33 @@
-const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
-const { User, AuthSession } = require("../models");
-const { writeAudit } = require("../services/auditService");
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { User, AuthSession } from "../models.js";
+import { writeAudit } from "../services/auditService.js";
+import { normalizeRole } from "../constants/rbac.js";
+import { Op } from "sequelize";
 
-const tokenTtlMs = Number(process.env.JWT_EXPIRES_MS || 24 * 60 * 60 * 1000);
+const tokenTtlMs = Number(process.env.JWT_EXPIRES_MS || 8 * 60 * 60 * 1000);
 
-const generateToken = (id, tokenId) =>
-  jwt.sign({ id, jti: tokenId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || "1d"
+const generateToken = (user, tokenId) =>
+  jwt.sign({ userId: user.id, id: user.id, role: normalizeRole(user.role), email: user.email, jti: tokenId }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "8h"
   });
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ where: { email: email.toLowerCase(), isActive: true } });
+    const { email, employee_id: employeeId, password } = req.body;
+    const emailValue = (email || employeeId || "").toLowerCase();
+    const user = await User.findOne({
+      where: {
+        isActive: true,
+        [Op.or]: [{ email: emailValue }, { name: emailValue }]
+      }
+    });
     if (!user || !(await user.matchPassword(password))) {
-      res.status(401);
-      return next(new Error("Invalid credentials"));
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const tokenId = crypto.randomUUID();
-    const token = generateToken(user.id, tokenId);
+    const token = generateToken(user, tokenId);
 
     await AuthSession.create({
       userId: user.id,
@@ -28,7 +35,7 @@ const login = async (req, res, next) => {
       expiresAt: new Date(Date.now() + tokenTtlMs)
     });
 
-    await writeAudit({ user, action: "login", entity: "auth", entityId: user.id });
+    await writeAudit({ user, action: "user_login", entity: "auth", entityId: user.id });
 
     return res.json({
       token,
@@ -36,7 +43,7 @@ const login = async (req, res, next) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: normalizeRole(user.role),
         department: user.department,
         reportingTo: user.reportingTo
       }
@@ -71,4 +78,4 @@ const me = async (req, res) => {
   res.json({ user: req.user });
 };
 
-module.exports = { login, logout, me };
+export { login, logout, me };

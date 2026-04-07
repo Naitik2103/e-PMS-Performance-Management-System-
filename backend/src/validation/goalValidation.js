@@ -1,4 +1,4 @@
-const { body } = require("express-validator");
+import { body } from "express-validator";
 
 const goalValidation = [
   body("goalTitle").trim().notEmpty().withMessage("Goal title is required"),
@@ -13,4 +13,4 @@ const submitValidation = [
   body("year").optional().isInt({ min: 2000 }).withMessage("Valid year is required")
 ];
 
-module.exports = { goalValidation, submitValidation };
+export { goalValidation, submitValidation };

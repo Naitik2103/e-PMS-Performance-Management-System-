@@ -1,3 +1,3 @@
-const { Goal } = require("./index");
+import { Goal } from "./index.js";
 
-module.exports = Goal;
+export default Goal;

@@ -1,3 +1,3 @@
-const { YearEndReview } = require("./index");
+import { YearEndReview } from "./index.js";
 
-module.exports = YearEndReview;
+export default YearEndReview;

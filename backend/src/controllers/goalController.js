@@ -1,7 +1,8 @@
-const { Op } = require("sequelize");
-const { Goal, User, AppraisalCycle } = require("../models");
-const { writeAudit } = require("../services/auditService");
-const { notifyUser } = require("../services/notificationService");
+import { Op } from "sequelize";
+import { Goal, User, AppraisalCycle, PerformanceReview } from "../models.js";
+import { writeAudit } from "../services/auditService.js";
+import { notifyUser } from "../services/notificationService.js";
+import { ROLES } from "../constants/rbac.js";
 
 const toNumber = (v) => Number(v || 0);
 
@@ -158,13 +159,16 @@ const listGoalsForRO = async (req, res, next) => {
 
 const listGoalsForReviewing = async (req, res, next) => {
   try {
-    const ros = await User.findAll({ where: { reportingTo: req.user.id, role: "ReportingOfficer" }, attributes: ["id"] });
+    const ros = await User.findAll({
+      where: { reportingTo: req.user.id, role: { [Op.in]: [ROLES.REPORTING_OFFICER, "ReportingOfficer"] } },
+      attributes: ["id"]
+    });
     const roIds = ros.map((r) => r.id);
     const employees = await User.findAll({ where: { reportingTo: roIds }, attributes: ["id"] });
     const employeeIds = employees.map((u) => u.id);
 
     const goals = await Goal.findAll({
-      where: { userId: employeeIds, status: "approved", reviewerRole: "ReportingOfficer" },
+      where: { userId: employeeIds, status: "approved", reviewerRole: ROLES.REPORTING_OFFICER },
       include: [
         { model: User, as: "employee", attributes: ["id", "name", "department"] },
         { model: AppraisalCycle, as: "cycle" }
@@ -194,7 +198,7 @@ const approveGoalByRO = async (req, res, next) => {
     goal.status = decision === "return" ? "returned" : "approved";
     goal.reviewedAt = new Date();
     goal.reviewedBy = req.user.id;
-    goal.reviewerRole = "ReportingOfficer";
+    goal.reviewerRole = ROLES.REPORTING_OFFICER;
     goal.reviewRemarks = remarks || null;
     await goal.save();
 
@@ -223,7 +227,7 @@ const approveGoalByReviewing = async (req, res, next) => {
       res.status(404);
       return next(new Error("Goal not found"));
     }
-    if (goal.status !== "approved" || goal.reviewerRole !== "ReportingOfficer") {
+    if (goal.status !== "approved" || goal.reviewerRole !== ROLES.REPORTING_OFFICER) {
       res.status(400);
       return next(new Error("Goal is not ready for Reviewing Officer action"));
     }
@@ -237,7 +241,7 @@ const approveGoalByReviewing = async (req, res, next) => {
     goal.status = decision === "return" ? "returned" : "approved";
     goal.reviewedAt = new Date();
     goal.reviewedBy = req.user.id;
-    goal.reviewerRole = "ReviewingOfficer";
+    goal.reviewerRole = ROLES.REVIEWING_OFFICER;
     goal.reviewRemarks = remarks || null;
     await goal.save();
 
@@ -257,7 +261,113 @@ const approveGoalByReviewing = async (req, res, next) => {
   }
 };
 
-module.exports = {
+const resolveReviewAndGoals = async (appraisalId) => {
+  const review = await PerformanceReview.findByPk(appraisalId);
+  if (!review) return { review: null, goals: [] };
+  const goals = await Goal.findAll({ where: { userId: review.employeeId, cycleId: review.cycleId } });
+  return { review, goals };
+};
+
+const getGoalsByAppraisalId = async (req, res, next) => {
+  try {
+    const { appraisalId } = req.params;
+    const { review, goals } = await resolveReviewAndGoals(appraisalId);
+    if (!review) return res.status(404).json({ error: "Appraisal not found" });
+    return res.json(goals);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const updateGoalsByAppraisalId = async (req, res, next) => {
+  try {
+    const { appraisalId } = req.params;
+    const { review, goals } = await resolveReviewAndGoals(appraisalId);
+    if (!review) return res.status(404).json({ error: "Appraisal not found" });
+    if (review.employeeId !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    if (review.status !== "draft") {
+      return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "draft", current: review.status });
+    }
+    const updates = Array.isArray(req.body?.goals) ? req.body.goals : [];
+    for (const update of updates) {
+      const goal = goals.find((g) => g.id === update.id);
+      if (!goal) continue;
+      goal.goalTitle = update.kpa_title ?? update.goalTitle ?? goal.goalTitle;
+      goal.goalDescription = update.description ?? update.goalDescription ?? goal.goalDescription;
+      goal.weightage = update.weightage ?? goal.weightage;
+      await goal.save();
+    }
+    return res.json({ message: "Goals updated" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const submitGoalsByAppraisalId = async (req, res, next) => {
+  try {
+    const { appraisalId } = req.params;
+    const { review, goals } = await resolveReviewAndGoals(appraisalId);
+    if (!review) return res.status(404).json({ error: "Appraisal not found" });
+    if (review.employeeId !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    if (review.status !== "draft") {
+      return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "draft", current: review.status });
+    }
+    const totalWeight = goals.reduce((sum, g) => sum + Number(g.weightage || 0), 0);
+    if (Math.round(totalWeight * 100) / 100 !== 100) {
+      return res.status(400).json({ error: "Validation error", details: ["Total goal weightage must equal 100"] });
+    }
+    await Goal.update({ status: "submitted", submittedAt: new Date() }, { where: { userId: review.employeeId, cycleId: review.cycleId } });
+    review.status = "submitted";
+    await review.save();
+    return res.json({ message: "Goals submitted" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const approveGoalsByAppraisalId = async (req, res, next) => {
+  try {
+    const { appraisalId } = req.params;
+    const { review } = await resolveReviewAndGoals(appraisalId);
+    if (!review) return res.status(404).json({ error: "Appraisal not found" });
+    if (review.status !== "submitted") {
+      return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "submitted", current: review.status });
+    }
+    const employee = await User.findByPk(review.employeeId, { attributes: ["reportingTo"] });
+    if (!employee || employee.reportingTo !== req.user.userId) {
+      return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    }
+    await Goal.update({ status: "approved", reviewedAt: new Date(), reviewedBy: req.user.userId, reviewerRole: ROLES.REPORTING_OFFICER }, { where: { userId: review.employeeId, cycleId: review.cycleId } });
+    review.status = "ro_approved";
+    await review.save();
+    return res.json({ message: "Goals approved" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const sendbackGoalsByAppraisalId = async (req, res, next) => {
+  try {
+    const { appraisalId } = req.params;
+    const { review } = await resolveReviewAndGoals(appraisalId);
+    if (!review) return res.status(404).json({ error: "Appraisal not found" });
+    if (review.status !== "submitted") {
+      return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "submitted", current: review.status });
+    }
+    const employee = await User.findByPk(review.employeeId, { attributes: ["reportingTo"] });
+    if (!employee || employee.reportingTo !== req.user.userId) {
+      return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    }
+    await Goal.update({ status: "returned", reviewedAt: new Date(), reviewedBy: req.user.userId, reviewerRole: ROLES.REPORTING_OFFICER }, { where: { userId: review.employeeId, cycleId: review.cycleId } });
+    review.status = "draft";
+    await review.save();
+    return res.json({ message: "Goals sent back" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export {
   createGoal,
   updateGoal,
   submitCycleGoals,
@@ -266,5 +376,10 @@ module.exports = {
   listGoalsForRO,
   listGoalsForReviewing,
   approveGoalByRO,
-  approveGoalByReviewing
+  approveGoalByReviewing,
+  getGoalsByAppraisalId,
+  updateGoalsByAppraisalId,
+  submitGoalsByAppraisalId,
+  approveGoalsByAppraisalId,
+  sendbackGoalsByAppraisalId
 };

@@ -1,5 +1,5 @@
-const express = require("express");
-const {
+import express from "express";
+import {
   listCycles,
   createCycle,
   updateCycle,
@@ -7,13 +7,14 @@ const {
   createAttributeMaster,
   updateAttributeMaster,
   roleAssignment
-} = require("../controllers/adminController");
-const { protect } = require("../middleware/auth");
-const { authorizeRoles } = require("../middleware/roles");
+} from "../controllers/adminController.js";
+import { protect } from "../middleware/auth.js";
+import { authorizeRoles } from "../middleware/roles.js";
+import { ROLES } from "../constants/rbac.js";
 
 const router = express.Router();
 
-router.use(protect, authorizeRoles("Admin"));
+router.use(protect, authorizeRoles(ROLES.HR_ADMIN));
 router.get("/cycles", listCycles);
 router.post("/cycles", createCycle);
 router.put("/cycles/:id", updateCycle);
@@ -22,4 +23,4 @@ router.post("/attributes", createAttributeMaster);
 router.put("/attributes/:id", updateAttributeMaster);
 router.put("/users/:id/role", roleAssignment);
 
-module.exports = router;
+export default router;

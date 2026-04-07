@@ -1,4 +1,5 @@
-const { Goal, SelfAppraisalGoalRating, QuantitativeAttributeRating, QuantitativeAttributeMaster } = require("../models");
+import { Goal, SelfAppraisalGoalRating, QuantitativeAttributeRating, QuantitativeAttributeMaster } from "../models.js";
+import { ROLES, normalizeRole } from "../constants/rbac.js";
 
 const toNumber = (value) => Number(value || 0);
 
@@ -30,19 +31,20 @@ const getAttributeCategoryAvg = async (reviewId, ratedByRole, category) => {
 
 const getRoleFinalScore = async ({ reviewId, selfAppraisalId, cycleId, ratedByRole }) => {
   const roleFieldMap = {
-    ReportingOfficer: "roRating",
-    ReviewingOfficer: "revoRating",
-    AcceptingOfficer: "aoRating"
+    [ROLES.REPORTING_OFFICER]: "roRating",
+    [ROLES.REVIEWING_OFFICER]: "revoRating",
+    [ROLES.ACCEPTING_OFFICER]: "aoRating"
   };
 
-  const goalScore = await getGoalScoreByRole(selfAppraisalId, cycleId, roleFieldMap[ratedByRole]);
-  const valuesScore = await getAttributeCategoryAvg(reviewId, ratedByRole, "Values");
-  const competenciesScore = await getAttributeCategoryAvg(reviewId, ratedByRole, "Competencies");
+  const normalizedRole = normalizeRole(ratedByRole);
+  const goalScore = await getGoalScoreByRole(selfAppraisalId, cycleId, roleFieldMap[normalizedRole]);
+  const valuesScore = await getAttributeCategoryAvg(reviewId, normalizedRole, "Values");
+  const competenciesScore = await getAttributeCategoryAvg(reviewId, normalizedRole, "Competencies");
 
   return goalScore * 0.7 + valuesScore * 0.1 + competenciesScore * 0.2;
 };
 
-module.exports = {
+export {
   getRoleFinalScore,
   average
 };

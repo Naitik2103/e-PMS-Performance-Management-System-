@@ -1,6 +1,7 @@
-const { DataTypes, Model } = require("sequelize");
-const bcrypt = require("bcryptjs");
-const { sequelize } = require("../config/db");
+import { DataTypes, Model } from "sequelize";
+import bcrypt from "bcryptjs";
+import { sequelize } from "../config/db.js";
+import { ROLES } from "../constants/rbac.js";
 
 class User extends Model {
   async matchPassword(password) {
@@ -20,16 +21,31 @@ User.init(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
     },
-    name: { type: DataTypes.STRING, allowNull: false },
+    firstName: { type: DataTypes.STRING, allowNull: true },
+    lastName: { type: DataTypes.STRING, allowNull: true },
+    name: { type: DataTypes.STRING, allowNull: true },
     email: { type: DataTypes.STRING, allowNull: false, unique: true },
     passwordHash: { type: DataTypes.STRING, allowNull: false },
     role: {
-      type: DataTypes.ENUM("Employee", "ReportingOfficer", "ReviewingOfficer", "AcceptingOfficer", "Admin"),
+      type: DataTypes.ENUM(
+        ROLES.EMPLOYEE,
+        ROLES.REPORTING_OFFICER,
+        ROLES.REVIEWING_OFFICER,
+        ROLES.ACCEPTING_OFFICER,
+        ROLES.HR_ADMIN,
+        "Employee",
+        "ReportingOfficer",
+        "ReviewingOfficer",
+        "AcceptingOfficer",
+        "Admin"
+      ),
       allowNull: false,
-      defaultValue: "Employee"
+      defaultValue: ROLES.EMPLOYEE
     },
     department: { type: DataTypes.STRING, allowNull: false },
     reportingTo: { type: DataTypes.UUID, allowNull: true },
+    reviewingOfficerId: { type: DataTypes.UUID, allowNull: true },
+    acceptingOfficerId: { type: DataTypes.UUID, allowNull: true },
     isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
   },
   {
@@ -74,6 +90,12 @@ AppraisalCycle.init(
     year: { type: DataTypes.INTEGER, allowNull: false },
     startDate: { type: DataTypes.DATEONLY, allowNull: false },
     endDate: { type: DataTypes.DATEONLY, allowNull: false },
+    goalSettingStart: { type: DataTypes.DATEONLY, allowNull: true },
+    goalSettingEnd: { type: DataTypes.DATEONLY, allowNull: true },
+    sixMonthProgressReviewStart: { type: DataTypes.DATEONLY, allowNull: true },
+    sixMonthProgressReviewEnd: { type: DataTypes.DATEONLY, allowNull: true },
+    annualAppraisalStart: { type: DataTypes.DATEONLY, allowNull: true },
+    annualAppraisalEnd: { type: DataTypes.DATEONLY, allowNull: true },
     isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     status: {
       type: DataTypes.ENUM("draft", "active", "closed"),
@@ -85,7 +107,7 @@ AppraisalCycle.init(
     sequelize,
     tableName: "appraisal_cycles",
     timestamps: true,
-    indexes: [{ fields: ["year"] }]
+    indexes: [{ unique: true, fields: ["year"] }]
   }
 );
 
@@ -273,7 +295,14 @@ QuantitativeAttributeRating.init(
     attributeId: { type: DataTypes.UUID, allowNull: false },
     ratedBy: { type: DataTypes.UUID, allowNull: false },
     ratedByRole: {
-      type: DataTypes.ENUM("ReportingOfficer", "ReviewingOfficer", "AcceptingOfficer"),
+      type: DataTypes.ENUM(
+        ROLES.REPORTING_OFFICER,
+        ROLES.REVIEWING_OFFICER,
+        ROLES.ACCEPTING_OFFICER,
+        "ReportingOfficer",
+        "ReviewingOfficer",
+        "AcceptingOfficer"
+      ),
       allowNull: false
     },
     rating: { type: DataTypes.INTEGER, allowNull: false },
@@ -384,7 +413,7 @@ Notification.belongsTo(User, { foreignKey: "userId", as: "recipient" });
 User.hasMany(AuditLog, { foreignKey: "userId", as: "auditLogs" });
 AuditLog.belongsTo(User, { foreignKey: "userId", as: "actor" });
 
-module.exports = {
+export {
   sequelize,
   User,
   AuthSession,

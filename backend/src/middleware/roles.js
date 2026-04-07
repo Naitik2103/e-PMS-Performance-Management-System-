@@ -1,11 +1,6 @@
-const allowRoles = (...roles) => (req, res, next) => {
-  if (!req.user || !roles.includes(req.user.role)) {
-    res.status(403);
-    return next(new Error("Access denied"));
-  }
-  return next();
-};
+import { authorise } from "./authorise.js";
 
-const authorizeRoles = (...roles) => allowRoles(...roles);
+const allowRoles = (...roles) => authorise(roles);
+const authorizeRoles = (...roles) => authorise(roles);
 
-module.exports = { allowRoles, authorizeRoles };
+export { allowRoles, authorizeRoles, authorise };

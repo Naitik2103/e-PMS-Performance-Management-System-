@@ -6,25 +6,21 @@ import {
   BarChart2,
   ClipboardList,
   Users,
+  UserPlus,
+  CalendarDays,
+  Network,
   LogOut,
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { ROLES, roleLabel } from "../constants/rbac";
 
 const roleHomeMap = {
-  Employee: "/dashboard",
-  ReportingOfficer: "/reporting-dashboard",
-  ReviewingOfficer: "/reviewing-dashboard",
-  AcceptingOfficer: "/accepting-dashboard",
-  Admin: "/admin-dashboard",
-};
-
-const roleLabel = {
-  Employee: "Employee",
-  ReportingOfficer: "Reporting Officer",
-  ReviewingOfficer: "Reviewing Officer",
-  AcceptingOfficer: "Accepting Officer",
-  Admin: "Administrator",
+  [ROLES.EMPLOYEE]: "/dashboard",
+  [ROLES.REPORTING_OFFICER]: "/reporting-dashboard",
+  [ROLES.REVIEWING_OFFICER]: "/reviewing-dashboard",
+  [ROLES.ACCEPTING_OFFICER]: "/accepting-dashboard",
+  [ROLES.HR_ADMIN]: "/admin-dashboard",
 };
 
 const navItems = [
@@ -32,31 +28,55 @@ const navItems = [
     to: (role) => roleHomeMap[role] || "/dashboard",
     icon: LayoutDashboard,
     label: "Dashboard",
-    roles: ["Employee", "ReportingOfficer", "ReviewingOfficer", "AcceptingOfficer", "Admin"],
+    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER, ROLES.HR_ADMIN],
   },
   {
     to: "/goals",
     icon: Target,
     label: "Goals",
-    roles: ["Employee", "ReportingOfficer", "ReviewingOfficer"],
+    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER],
   },
   {
     to: "/tracking",
     icon: BarChart2,
     label: "Six-Month Tracking",
-    roles: ["Employee", "ReportingOfficer"],
+    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER],
   },
   {
     to: "/reviews",
     icon: ClipboardList,
     label: "Year-End Reviews",
-    roles: ["Employee", "ReportingOfficer", "ReviewingOfficer", "AcceptingOfficer"],
+    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER],
   },
   {
     to: "/admin-dashboard",
     icon: Users,
     label: "Admin Panel",
-    roles: ["Admin"],
+    roles: [ROLES.HR_ADMIN],
+  },
+  {
+    to: "/admin/create-user",
+    icon: UserPlus,
+    label: "Create New User",
+    roles: [ROLES.HR_ADMIN],
+  },
+  {
+    to: "/admin/cycles",
+    icon: CalendarDays,
+    label: "Appraisal Cycle Management",
+    roles: [ROLES.HR_ADMIN],
+  },
+  {
+    to: "/admin/all-users",
+    icon: Users,
+    label: "All Users",
+    roles: [ROLES.HR_ADMIN],
+  },
+  {
+    to: "/admin/hierarchy",
+    icon: Network,
+    label: "Reporting Hierarchy",
+    roles: [ROLES.HR_ADMIN],
   },
 ];
 
@@ -102,7 +122,7 @@ const Sidebar = () => {
           <div className="sidebar-avatar">{initials}</div>
           <div className="sidebar-user-info">
             <div className="sidebar-user-name">{user?.name || "User"}</div>
-            <div className="sidebar-user-role">{roleLabel[role] || role}</div>
+            <div className="sidebar-user-role">{roleLabel(role)}</div>
           </div>
         </div>
         <button className="sidebar-logout" onClick={handleLogout} title="Logout">
