@@ -1,5 +1,5 @@
-import { SelfAppraisalGoalRating, QuantitativeAttributeRating, PerformanceReview, sequelize } from "../models.js";
-import { logAction } from "./auditLogger.js";
+import pool from "../config/db.js";
+import { writeAudit } from "./auditService.js";
 
 const avg = (rows) => {
   if (!rows.length) return 0;
@@ -7,50 +7,49 @@ const avg = (rows) => {
 };
 
 const computeScore = async (appraisalId, { actorId, transaction } = {}) => {
-  const ownTx = !transaction;
-  const tx = transaction || (await sequelize.transaction());
+  const client = transaction || pool;
   try {
-    const review = await PerformanceReview.findByPk(appraisalId, { transaction: tx });
-    if (!review) {
-      throw new Error("Appraisal not found");
-    }
+    const appRes = await client.query("SELECT id FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+    if (!appRes.rows.length) throw new Error("Appraisal not found");
 
-    const kpaRows = await SelfAppraisalGoalRating.findAll({ where: { selfAppraisalId: review.selfAppraisalId }, transaction: tx });
-    const attrRows = await QuantitativeAttributeRating.findAll({ where: { reviewId: appraisalId }, transaction: tx });
+    const kpa = await client.query(
+      "SELECT ro_rating, revo_rating, ao_rating FROM appraisal_goal_ratings WHERE appraisal_id = $1",
+      [appraisalId]
+    );
+    const attrs = await client.query(
+      "SELECT rated_by_role, rating FROM quantitative_attribute_ratings WHERE appraisal_id = $1",
+      [appraisalId]
+    );
 
     const roScore = avg([
-      ...kpaRows.map((r) => ({ score: r.roRating })),
-      ...attrRows.filter((r) => ["reporting_officer", "ReportingOfficer"].includes(r.ratedByRole))
+      ...kpa.rows.map((r) => ({ score: r.ro_rating })),
+      ...attrs.rows.filter((r) => ["reporting_officer", "ReportingOfficer"].includes(r.rated_by_role))
     ]);
     const rewScore = avg([
-      ...kpaRows.map((r) => ({ score: r.revoRating })),
-      ...attrRows.filter((r) => ["reviewing_officer", "ReviewingOfficer"].includes(r.ratedByRole))
+      ...kpa.rows.map((r) => ({ score: r.revo_rating })),
+      ...attrs.rows.filter((r) => ["reviewing_officer", "ReviewingOfficer"].includes(r.rated_by_role))
     ]);
     const aoScore = avg([
-      ...kpaRows.map((r) => ({ score: r.aoRating })),
-      ...attrRows.filter((r) => ["accepting_officer", "AcceptingOfficer"].includes(r.ratedByRole))
+      ...kpa.rows.map((r) => ({ score: r.ao_rating })),
+      ...attrs.rows.filter((r) => ["accepting_officer", "AcceptingOfficer"].includes(r.rated_by_role))
     ]);
 
     const finalScore = roScore * 0.7 + rewScore * 0.1 + aoScore * 0.2;
-    review.roScore = roScore;
-    review.revoScore = rewScore;
-    review.aoScore = aoScore;
-    review.finalScore = finalScore;
-    await review.save({ transaction: tx });
+    await client.query(
+      "UPDATE appraisals SET ro_score = $1, revo_score = $2, ao_score = $3, final_score = $4, updated_at = NOW() WHERE id = $5",
+      [roScore, rewScore, aoScore, finalScore, appraisalId]
+    );
 
-    await logAction({
-      actorId,
+    await writeAudit({
+      user: { userId: actorId, role: null },
       action: "appraisal_completed",
-      targetTable: "performance_reviews",
-      targetId: appraisalId,
-      metadata: { roScore, rewScore, aoScore, finalScore },
-      transaction: tx
+      entity: "appraisal",
+      entityId: appraisalId,
+      details: { roScore, rewScore, aoScore, finalScore }
     });
 
-    if (ownTx) await tx.commit();
     return { roScore, rewScore, aoScore, finalScore };
   } catch (error) {
-    if (ownTx) await tx.rollback();
     throw error;
   }
 };

@@ -21,17 +21,17 @@ const createUserValidation = [
   body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
   body("role").optional().isIn(allowedRoles).withMessage("Invalid role"),
   body("department").trim().notEmpty().withMessage("Department is required"),
-  body("reportingTo").optional().isUUID().withMessage("reportingTo must be a valid UUID"),
-  body("reviewingOfficerId").optional().isUUID().withMessage("reviewingOfficerId must be a valid UUID"),
-  body("acceptingOfficerId").optional().isUUID().withMessage("acceptingOfficerId must be a valid UUID")
+  body("reportingTo").optional({ checkFalsy: true }).isUUID().withMessage("reportingTo must be a valid UUID"),
+  body("reviewingOfficerId").optional({ checkFalsy: true }).isUUID().withMessage("reviewingOfficerId must be a valid UUID"),
+  body("acceptingOfficerId").optional({ checkFalsy: true }).isUUID().withMessage("acceptingOfficerId must be a valid UUID")
 ];
 
 const updateUserValidation = [
   body("role").optional().isIn(allowedRoles).withMessage("Invalid role"),
   body("department").optional().trim().notEmpty().withMessage("Department is required"),
-  body("reportingTo").optional().isUUID().withMessage("reportingTo must be a valid UUID"),
-  body("reviewingOfficerId").optional().isUUID().withMessage("reviewingOfficerId must be a valid UUID"),
-  body("acceptingOfficerId").optional().isUUID().withMessage("acceptingOfficerId must be a valid UUID")
+  body("reportingTo").optional({ checkFalsy: true }).isUUID().withMessage("reportingTo must be a valid UUID"),
+  body("reviewingOfficerId").optional({ checkFalsy: true }).isUUID().withMessage("reviewingOfficerId must be a valid UUID"),
+  body("acceptingOfficerId").optional({ checkFalsy: true }).isUUID().withMessage("acceptingOfficerId must be a valid UUID")
 ];
 
 export { createUserValidation, updateUserValidation };

@@ -1,5 +1,5 @@
 import express from "express";
-import { login, logout, me } from "../controllers/authController.js";
+import { login, logout, me, selectRole } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 import { loginValidation } from "../validation/authValidation.js";
 import { validate } from "../middleware/validate.js";
@@ -11,6 +11,7 @@ router.post("/forgot-password", (req, res) => {
   return res.json({ message: "If the account exists, a reset flow has been initiated." });
 });
 router.get("/me", protect, me);
+router.post("/select-role", protect, selectRole);
 router.post("/logout", protect, logout);
 
 export default router;

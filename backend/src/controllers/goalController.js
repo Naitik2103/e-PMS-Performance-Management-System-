@@ -1,24 +1,54 @@
-import { Op } from "sequelize";
-import { Goal, User, AppraisalCycle, PerformanceReview } from "../models.js";
 import { writeAudit } from "../services/auditService.js";
 import { notifyUser } from "../services/notificationService.js";
 import { ROLES } from "../constants/rbac.js";
+import pool from "../config/db.js";
 
 const toNumber = (v) => Number(v || 0);
 
 const getActiveOrByYearCycle = async (cycleId, year) => {
   if (cycleId) {
-    return AppraisalCycle.findByPk(cycleId);
+    const r = await pool.query("SELECT * FROM appraisal_cycles WHERE cycle_id = $1 LIMIT 1", [cycleId]);
+    return r.rows[0] || null;
   }
   if (year) {
-    return AppraisalCycle.findOne({ where: { year, status: { [Op.in]: ["active", "draft"] } }, order: [["createdAt", "DESC"]] });
+    const r = await pool.query(
+      "SELECT * FROM appraisal_cycles WHERE cycle_year = $1 ORDER BY created_at DESC LIMIT 1",
+      [String(year)]
+    );
+    return r.rows[0] || null;
   }
-  return AppraisalCycle.findOne({ where: { isActive: true }, order: [["createdAt", "DESC"]] });
+  const r = await pool.query(
+    "SELECT * FROM appraisal_cycles WHERE closed_at IS NULL ORDER BY created_at DESC LIMIT 1"
+  );
+  return r.rows[0] || null;
 };
 
-const getDirectReports = async (managerId) => {
-  const users = await User.findAll({ where: { reportingTo: managerId, isActive: true }, attributes: ["id"] });
-  return users.map((u) => u.id);
+const ensureAppraisal = async (employeeId, cycleId) => {
+  const existing = await pool.query(
+    "SELECT id, employee_id, cycle_id, ro_id, revo_id, ao_id, status FROM appraisals WHERE employee_id = $1 AND cycle_id = $2 LIMIT 1",
+    [employeeId, cycleId]
+  );
+  if (existing.rows.length) return existing.rows[0];
+
+  const p = await pool.query(
+    `
+    SELECT reporting_officer_id, reviewing_officer_id, accepting_officer_id
+    FROM appraisal_cycle_participants
+    WHERE cycle_id = $1 AND employee_id = $2
+    LIMIT 1
+    `,
+    [cycleId, employeeId]
+  );
+  const row = p.rows[0] || {};
+  const inserted = await pool.query(
+    `
+    INSERT INTO appraisals (employee_id, cycle_id, ro_id, revo_id, ao_id, status)
+    VALUES ($1,$2,$3,$4,$5,'draft')
+    RETURNING id, employee_id, cycle_id, ro_id, revo_id, ao_id, status
+    `,
+    [employeeId, cycleId, row.reporting_officer_id || null, row.reviewing_officer_id || null, row.accepting_officer_id || null]
+  );
+  return inserted.rows[0];
 };
 
 const createGoal = async (req, res, next) => {
@@ -30,17 +60,21 @@ const createGoal = async (req, res, next) => {
       return next(new Error("Appraisal cycle not found"));
     }
 
-    const goal = await Goal.create({
-      userId: req.user.id,
-      cycleId: cycle.id,
-      goalTitle,
-      goalDescription,
-      weightage,
-      status: "draft"
-    });
+    const appraisal = await ensureAppraisal(req.user.id, cycle.cycle_id);
 
-    await writeAudit({ user: req.user, action: "create", entity: "goal", entityId: goal.id, details: { cycleId: cycle.id } });
-    return res.status(201).json(goal);
+    const inserted = await pool.query(
+      `
+      INSERT INTO goals (goal_title, goal_description, user_id, weightage, status, cycle_id, appraisal_id, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,'draft',$5,$6,NOW(),NOW())
+      RETURNING goal_id
+      `,
+      [goalTitle, goalDescription || null, req.user.id, Number(weightage), cycle.cycle_id, appraisal.id]
+    );
+    const goalId = inserted.rows[0].goal_id;
+
+    await writeAudit({ user: req.user, action: "create", entity: "goal", entityId: goalId, details: { cycleId: cycle.cycle_id } });
+    const out = await pool.query("SELECT * FROM goals WHERE goal_id = $1", [goalId]);
+    return res.status(201).json(out.rows[0]);
   } catch (error) {
     return next(error);
   }
@@ -49,7 +83,11 @@ const createGoal = async (req, res, next) => {
 const updateGoal = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const goal = await Goal.findOne({ where: { id, userId: req.user.id } });
+    const r = await pool.query(
+      "SELECT goal_id, status FROM goals WHERE goal_id = $1 AND user_id = $2 LIMIT 1",
+      [id, req.user.id]
+    );
+    const goal = r.rows[0];
     if (!goal) {
       res.status(404);
       return next(new Error("Goal not found"));
@@ -59,13 +97,18 @@ const updateGoal = async (req, res, next) => {
       return next(new Error("Goal cannot be edited at this stage"));
     }
 
-    goal.goalTitle = req.body.goalTitle;
-    goal.goalDescription = req.body.goalDescription;
-    goal.weightage = req.body.weightage;
-    await goal.save();
+    await pool.query(
+      `
+      UPDATE goals
+      SET goal_title = $1, goal_description = $2, weightage = $3, updated_at = NOW()
+      WHERE goal_id = $4 AND user_id = $5
+      `,
+      [req.body.goalTitle, req.body.goalDescription || null, Number(req.body.weightage), id, req.user.id]
+    );
 
-    await writeAudit({ user: req.user, action: "update", entity: "goal", entityId: goal.id });
-    return res.json(goal);
+    await writeAudit({ user: req.user, action: "update", entity: "goal", entityId: id });
+    const out = await pool.query("SELECT * FROM goals WHERE goal_id = $1", [id]);
+    return res.json(out.rows[0]);
   } catch (error) {
     return next(error);
   }
@@ -80,34 +123,57 @@ const submitCycleGoals = async (req, res, next) => {
       return next(new Error("Appraisal cycle not found"));
     }
 
-    const goals = await Goal.findAll({ where: { userId: req.user.id, cycleId: cycle.id } });
-    if (!goals.length) {
+    const goals = await pool.query(
+      "SELECT goal_id, weightage FROM goals WHERE user_id = $1 AND cycle_id = $2",
+      [req.user.id, cycle.cycle_id]
+    );
+    if (!goals.rows.length) {
       res.status(400);
       return next(new Error("No goals found to submit"));
     }
 
-    const totalWeight = goals.reduce((sum, g) => sum + toNumber(g.weightage), 0);
+    const totalWeight = goals.rows.reduce((sum, g) => sum + toNumber(g.weightage), 0);
     if (Math.round(totalWeight * 100) / 100 !== 100) {
       res.status(400);
       return next(new Error(`Total goal weightage must equal 100 for submission. Current: ${totalWeight}`));
     }
 
-    await Goal.update({ status: "submitted", submittedAt: new Date() }, { where: { userId: req.user.id, cycleId: cycle.id } });
+    await pool.query(
+      "UPDATE goals SET status = 'submitted', updated_at = NOW() WHERE user_id = $1 AND cycle_id = $2",
+      [req.user.id, cycle.cycle_id]
+    );
 
-    const employee = await User.findByPk(req.user.id, { attributes: ["id", "name", "reportingTo"] });
-    if (employee?.reportingTo) {
+    const employee = await pool.query(
+      "SELECT first_name, last_name, email FROM users WHERE user_id = $1 LIMIT 1",
+      [req.user.id]
+    );
+    const name =
+      `${employee.rows[0]?.first_name || ""} ${employee.rows[0]?.last_name || ""}`.trim() || employee.rows[0]?.email;
+
+    const roRow = await pool.query(
+      `
+      SELECT reporting_officer_id
+      FROM appraisal_cycle_participants
+      WHERE cycle_id = $1 AND employee_id = $2
+      LIMIT 1
+      `,
+      [cycle.cycle_id, req.user.id]
+    );
+    const roId = roRow.rows[0]?.reporting_officer_id || null;
+    if (roId) {
       await notifyUser({
-        userId: employee.reportingTo,
+        userId: roId,
+        senderId: req.user.id,
         title: "Goal Submission Pending",
-        message: `${employee.name} has submitted goals for ${cycle.name}`,
+        message: `${name} has submitted goals for ${cycle.cycle_name}`,
         type: "goal_submission",
         entity: "goal",
-        entityId: goals[0].id
+        entityId: goals.rows[0].goal_id
       });
     }
 
-    await writeAudit({ user: req.user, action: "submit", entity: "goal", details: { cycleId: cycle.id, count: goals.length } });
-    return res.json({ message: "Goals submitted", cycleId: cycle.id, totalWeight });
+    await writeAudit({ user: req.user, action: "submit", entity: "goal", details: { cycleId: cycle.cycle_id, count: goals.rows.length } });
+    return res.json({ message: "Goals submitted", cycleId: cycle.cycle_id, totalWeight });
   } catch (error) {
     return next(error);
   }
@@ -115,12 +181,37 @@ const submitCycleGoals = async (req, res, next) => {
 
 const listMyGoals = async (req, res, next) => {
   try {
-    const goals = await Goal.findAll({
-      where: { userId: req.user.id },
-      include: [{ model: AppraisalCycle, as: "cycle" }],
-      order: [["createdAt", "DESC"]]
-    });
-    return res.json(goals);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        g.goal_id,
+        g.goal_title,
+        g.goal_description,
+        g.weightage,
+        g.status,
+        g.cycle_id,
+        c.cycle_name,
+        c.cycle_year
+      FROM goals g
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+      WHERE g.user_id = $1
+      ORDER BY g.created_at DESC
+      `,
+      [req.user.id]
+    );
+
+    const out = rows.map((g) => ({
+      id: g.goal_id,
+      goalTitle: g.goal_title,
+      goalDescription: g.goal_description,
+      weightage: g.weightage,
+      status: g.status,
+      cycleId: g.cycle_id,
+      cycle: g.cycle_id
+        ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) }
+        : null
+    }));
+    return res.json(out);
   } catch (error) {
     return next(error);
   }
@@ -128,14 +219,42 @@ const listMyGoals = async (req, res, next) => {
 
 const listAllGoals = async (req, res, next) => {
   try {
-    const goals = await Goal.findAll({
-      include: [
-        { model: User, as: "employee", attributes: ["id", "name", "email", "role", "department"] },
-        { model: AppraisalCycle, as: "cycle" }
-      ],
-      order: [["createdAt", "DESC"]]
-    });
-    return res.json(goals);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        g.goal_id,
+        g.goal_title,
+        g.goal_description,
+        g.weightage,
+        g.status,
+        g.cycle_id,
+        c.cycle_name,
+        c.cycle_year,
+        u.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department
+      FROM goals g
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+      LEFT JOIN users u ON u.user_id = g.user_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      ORDER BY g.created_at DESC
+      `
+    );
+    const out = rows.map((g) => ({
+      id: g.goal_id,
+      goalTitle: g.goal_title,
+      goalDescription: g.goal_description,
+      weightage: g.weightage,
+      status: g.status,
+      cycleId: g.cycle_id,
+      cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
+      employee: g.user_id
+        ? { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
+        : null
+    }));
+    return res.json(out);
   } catch (error) {
     return next(error);
   }
@@ -143,15 +262,43 @@ const listAllGoals = async (req, res, next) => {
 
 const listGoalsForRO = async (req, res, next) => {
   try {
-    const reportIds = await getDirectReports(req.user.id);
-    const goals = await Goal.findAll({
-      where: { userId: reportIds, status: "submitted" },
-      include: [
-        { model: User, as: "employee", attributes: ["id", "name", "department"] },
-        { model: AppraisalCycle, as: "cycle" }
-      ]
-    });
-    return res.json(goals);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        g.goal_id,
+        g.goal_title,
+        g.goal_description,
+        g.weightage,
+        g.status,
+        g.cycle_id,
+        c.cycle_name,
+        c.cycle_year,
+        u.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department
+      FROM goals g
+      JOIN appraisal_cycle_participants p ON p.cycle_id = g.cycle_id AND p.employee_id = g.user_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+      LEFT JOIN users u ON u.user_id = g.user_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE p.reporting_officer_id = $1 AND g.status = 'submitted'
+      ORDER BY g.created_at DESC
+      `,
+      [req.user.id]
+    );
+    const out = rows.map((g) => ({
+      id: g.goal_id,
+      goalTitle: g.goal_title,
+      goalDescription: g.goal_description,
+      weightage: g.weightage,
+      status: g.status,
+      cycleId: g.cycle_id,
+      cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
+      employee: { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
+    }));
+    return res.json(out);
   } catch (error) {
     return next(error);
   }
@@ -159,22 +306,43 @@ const listGoalsForRO = async (req, res, next) => {
 
 const listGoalsForReviewing = async (req, res, next) => {
   try {
-    const ros = await User.findAll({
-      where: { reportingTo: req.user.id, role: { [Op.in]: [ROLES.REPORTING_OFFICER, "ReportingOfficer"] } },
-      attributes: ["id"]
-    });
-    const roIds = ros.map((r) => r.id);
-    const employees = await User.findAll({ where: { reportingTo: roIds }, attributes: ["id"] });
-    const employeeIds = employees.map((u) => u.id);
-
-    const goals = await Goal.findAll({
-      where: { userId: employeeIds, status: "approved", reviewerRole: ROLES.REPORTING_OFFICER },
-      include: [
-        { model: User, as: "employee", attributes: ["id", "name", "department"] },
-        { model: AppraisalCycle, as: "cycle" }
-      ]
-    });
-    return res.json(goals);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        g.goal_id,
+        g.goal_title,
+        g.goal_description,
+        g.weightage,
+        g.status,
+        g.cycle_id,
+        c.cycle_name,
+        c.cycle_year,
+        u.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department
+      FROM goals g
+      JOIN appraisal_cycle_participants p ON p.cycle_id = g.cycle_id AND p.employee_id = g.user_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+      LEFT JOIN users u ON u.user_id = g.user_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE p.reviewing_officer_id = $1 AND g.status = 'approved'
+      ORDER BY g.created_at DESC
+      `,
+      [req.user.id]
+    );
+    const out = rows.map((g) => ({
+      id: g.goal_id,
+      goalTitle: g.goal_title,
+      goalDescription: g.goal_description,
+      weightage: g.weightage,
+      status: g.status,
+      cycleId: g.cycle_id,
+      cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
+      employee: { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
+    }));
+    return res.json(out);
   } catch (error) {
     return next(error);
   }
@@ -184,35 +352,46 @@ const approveGoalByRO = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { remarks, decision = "approve" } = req.body;
-    const goal = await Goal.findByPk(id, { include: [{ model: User, as: "employee", attributes: ["id", "reportingTo", "name"] }] });
-
-    if (!goal || !goal.employee || goal.employee.reportingTo !== req.user.id) {
+    const goalRes = await pool.query("SELECT goal_id, user_id, status, goal_title, cycle_id FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
+    const goal = goalRes.rows[0];
+    if (!goal) {
       res.status(404);
       return next(new Error("Goal not found or not in your team"));
     }
+
+    const p = await pool.query(
+      "SELECT reporting_officer_id FROM appraisal_cycle_participants WHERE cycle_id = $1 AND employee_id = $2 LIMIT 1",
+      [goal.cycle_id, goal.user_id]
+    );
+    if (!p.rows.length || p.rows[0].reporting_officer_id !== req.user.id) {
+      res.status(403);
+      return next(new Error("Goal not found or not in your team"));
+    }
+
     if (goal.status !== "submitted") {
       res.status(400);
       return next(new Error("Goal is not ready for RO action"));
     }
 
-    goal.status = decision === "return" ? "returned" : "approved";
-    goal.reviewedAt = new Date();
-    goal.reviewedBy = req.user.id;
-    goal.reviewerRole = ROLES.REPORTING_OFFICER;
-    goal.reviewRemarks = remarks || null;
-    await goal.save();
+    const nextStatus = decision === "return" ? "returned" : "approved";
+    await pool.query(
+      "UPDATE goals SET status = $1, ro_approval_remarks = $2, updated_at = NOW() WHERE goal_id = $3",
+      [nextStatus, remarks || null, id]
+    );
 
     await notifyUser({
-      userId: goal.userId,
+      userId: goal.user_id,
+      senderId: req.user.id,
       title: "Goal Reviewed by Reporting Officer",
-      message: `Your goal \"${goal.goalTitle}\" was ${goal.status}.`,
+      message: `Your goal \"${goal.goal_title}\" was ${nextStatus}.`,
       type: "goal_review",
       entity: "goal",
-      entityId: goal.id
+      entityId: id
     });
 
-    await writeAudit({ user: req.user, action: goal.status === "approved" ? "approve" : "return", entity: "goal", entityId: goal.id });
-    return res.json(goal);
+    await writeAudit({ user: req.user, action: nextStatus === "approved" ? "approve" : "return", entity: "goal", entityId: id });
+    const out = await pool.query("SELECT * FROM goals WHERE goal_id = $1", [id]);
+    return res.json(out.rows[0]);
   } catch (error) {
     return next(error);
   }
@@ -222,50 +401,58 @@ const approveGoalByReviewing = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { remarks, decision = "approve" } = req.body;
-    const goal = await Goal.findByPk(id, { include: [{ model: User, as: "employee", attributes: ["id", "reportingTo", "name"] }] });
+    const goalRes = await pool.query("SELECT goal_id, user_id, status, cycle_id, goal_title FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
+    const goal = goalRes.rows[0];
     if (!goal) {
       res.status(404);
       return next(new Error("Goal not found"));
     }
-    if (goal.status !== "approved" || goal.reviewerRole !== ROLES.REPORTING_OFFICER) {
+    if (goal.status !== "approved") {
       res.status(400);
       return next(new Error("Goal is not ready for Reviewing Officer action"));
     }
 
-    const ro = await User.findByPk(goal.employee.reportingTo, { attributes: ["reportingTo"] });
-    if (!ro || ro.reportingTo !== req.user.id) {
+    const p = await pool.query(
+      "SELECT reviewing_officer_id FROM appraisal_cycle_participants WHERE cycle_id = $1 AND employee_id = $2 LIMIT 1",
+      [goal.cycle_id, goal.user_id]
+    );
+    if (!p.rows.length || p.rows[0].reviewing_officer_id !== req.user.id) {
       res.status(403);
       return next(new Error("Access denied for this goal"));
     }
 
-    goal.status = decision === "return" ? "returned" : "approved";
-    goal.reviewedAt = new Date();
-    goal.reviewedBy = req.user.id;
-    goal.reviewerRole = ROLES.REVIEWING_OFFICER;
-    goal.reviewRemarks = remarks || null;
-    await goal.save();
+    const nextStatus = decision === "return" ? "returned" : "approved";
+    await pool.query(
+      "UPDATE goals SET status = $1, updated_at = NOW() WHERE goal_id = $2",
+      [nextStatus, id]
+    );
 
     await notifyUser({
-      userId: goal.userId,
+      userId: goal.user_id,
+      senderId: req.user.id,
       title: "Goal Reviewed by Reviewing Officer",
-      message: `Your goal \"${goal.goalTitle}\" was ${decision === "return" ? "returned" : "approved"}.`,
+      message: `Your goal \"${goal.goal_title}\" was ${nextStatus}.`,
       type: "goal_review",
       entity: "goal",
-      entityId: goal.id
+      entityId: id
     });
 
-    await writeAudit({ user: req.user, action: decision === "return" ? "return" : "approve", entity: "goal", entityId: goal.id });
-    return res.json(goal);
+    await writeAudit({ user: req.user, action: decision === "return" ? "return" : "approve", entity: "goal", entityId: id });
+    const out = await pool.query("SELECT * FROM goals WHERE goal_id = $1", [id]);
+    return res.json(out.rows[0]);
   } catch (error) {
     return next(error);
   }
 };
 
 const resolveReviewAndGoals = async (appraisalId) => {
-  const review = await PerformanceReview.findByPk(appraisalId);
-  if (!review) return { review: null, goals: [] };
-  const goals = await Goal.findAll({ where: { userId: review.employeeId, cycleId: review.cycleId } });
-  return { review, goals };
+  const review = await pool.query("SELECT * FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+  if (!review.rows.length) return { review: null, goals: [] };
+  const r = review.rows[0];
+  const goals = await pool.query("SELECT * FROM goals WHERE appraisal_id = $1 ORDER BY display_order NULLS LAST, created_at ASC", [
+    appraisalId
+  ]);
+  return { review: r, goals: goals.rows };
 };
 
 const getGoalsByAppraisalId = async (req, res, next) => {
@@ -284,18 +471,23 @@ const updateGoalsByAppraisalId = async (req, res, next) => {
     const { appraisalId } = req.params;
     const { review, goals } = await resolveReviewAndGoals(appraisalId);
     if (!review) return res.status(404).json({ error: "Appraisal not found" });
-    if (review.employeeId !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    if (review.employee_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
     if (review.status !== "draft") {
       return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "draft", current: review.status });
     }
     const updates = Array.isArray(req.body?.goals) ? req.body.goals : [];
     for (const update of updates) {
-      const goal = goals.find((g) => g.id === update.id);
+      const goal = goals.find((g) => g.goal_id === update.id || g.goal_id === update.goal_id);
       if (!goal) continue;
-      goal.goalTitle = update.kpa_title ?? update.goalTitle ?? goal.goalTitle;
-      goal.goalDescription = update.description ?? update.goalDescription ?? goal.goalDescription;
-      goal.weightage = update.weightage ?? goal.weightage;
-      await goal.save();
+      await pool.query(
+        "UPDATE goals SET goal_title = COALESCE($1, goal_title), goal_description = COALESCE($2, goal_description), weightage = COALESCE($3, weightage), updated_at = NOW() WHERE goal_id = $4",
+        [
+          update.kpa_title ?? update.goalTitle ?? null,
+          update.description ?? update.goalDescription ?? null,
+          update.weightage ?? null,
+          goal.goal_id
+        ]
+      );
     }
     return res.json({ message: "Goals updated" });
   } catch (error) {
@@ -308,7 +500,7 @@ const submitGoalsByAppraisalId = async (req, res, next) => {
     const { appraisalId } = req.params;
     const { review, goals } = await resolveReviewAndGoals(appraisalId);
     if (!review) return res.status(404).json({ error: "Appraisal not found" });
-    if (review.employeeId !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    if (review.employee_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
     if (review.status !== "draft") {
       return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "draft", current: review.status });
     }
@@ -316,9 +508,8 @@ const submitGoalsByAppraisalId = async (req, res, next) => {
     if (Math.round(totalWeight * 100) / 100 !== 100) {
       return res.status(400).json({ error: "Validation error", details: ["Total goal weightage must equal 100"] });
     }
-    await Goal.update({ status: "submitted", submittedAt: new Date() }, { where: { userId: review.employeeId, cycleId: review.cycleId } });
-    review.status = "submitted";
-    await review.save();
+    await pool.query("UPDATE goals SET status = 'submitted', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
+    await pool.query("UPDATE appraisals SET status = 'submitted', goals_submitted_at = NOW() WHERE id = $1", [appraisalId]);
     return res.json({ message: "Goals submitted" });
   } catch (error) {
     return next(error);
@@ -333,13 +524,11 @@ const approveGoalsByAppraisalId = async (req, res, next) => {
     if (review.status !== "submitted") {
       return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "submitted", current: review.status });
     }
-    const employee = await User.findByPk(review.employeeId, { attributes: ["reportingTo"] });
-    if (!employee || employee.reportingTo !== req.user.userId) {
+    if (review.ro_id !== req.user.userId) {
       return res.status(403).json({ error: "This appraisal is not assigned to you" });
     }
-    await Goal.update({ status: "approved", reviewedAt: new Date(), reviewedBy: req.user.userId, reviewerRole: ROLES.REPORTING_OFFICER }, { where: { userId: review.employeeId, cycleId: review.cycleId } });
-    review.status = "ro_approved";
-    await review.save();
+    await pool.query("UPDATE goals SET status = 'approved', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
+    await pool.query("UPDATE appraisals SET status = 'ro_approved', goals_approved_at = NOW() WHERE id = $1", [appraisalId]);
     return res.json({ message: "Goals approved" });
   } catch (error) {
     return next(error);
@@ -354,13 +543,11 @@ const sendbackGoalsByAppraisalId = async (req, res, next) => {
     if (review.status !== "submitted") {
       return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "submitted", current: review.status });
     }
-    const employee = await User.findByPk(review.employeeId, { attributes: ["reportingTo"] });
-    if (!employee || employee.reportingTo !== req.user.userId) {
+    if (review.ro_id !== req.user.userId) {
       return res.status(403).json({ error: "This appraisal is not assigned to you" });
     }
-    await Goal.update({ status: "returned", reviewedAt: new Date(), reviewedBy: req.user.userId, reviewerRole: ROLES.REPORTING_OFFICER }, { where: { userId: review.employeeId, cycleId: review.cycleId } });
-    review.status = "draft";
-    await review.save();
+    await pool.query("UPDATE goals SET status = 'returned', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
+    await pool.query("UPDATE appraisals SET status = 'draft' WHERE id = $1", [appraisalId]);
     return res.json({ message: "Goals sent back" });
   } catch (error) {
     return next(error);

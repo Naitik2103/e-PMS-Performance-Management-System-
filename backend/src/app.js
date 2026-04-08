@@ -3,20 +3,18 @@ import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
 
-import authRoutes from "./routes/authRoutes.js";
 import authRoutesV2 from "./routes/auth.js";
 import userRoutes from "./routes/userRoutes.js";
-import goalRoutes from "./routes/goalRoutes.js";
+import adminRoutesV2 from "./routes/admin.js";
 import goalsRoutesV2 from "./routes/goals.js";
 import trackingRoutes from "./routes/trackingRoutes.js";
 import sixMonthRoutesV2 from "./routes/sixMonthReview.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
-import selfAppraisalRoutesV2 from "./routes/selfAppraisal.js";
-import ratingsRoutesV2 from "./routes/ratings.js";
+import selfAppraisalRoutes from "./routes/selfAppraisal.js";
+import ratingsRoutes from "./routes/ratings.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
-import adminRoutesV2 from "./routes/admin.js";
 import appraisalRoutes from "./routes/appraisalRoutes.js";
+import pool from "./config/db.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
 dotenv.config();
@@ -32,19 +30,36 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutesV2);
-app.use("/api/legacy/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/admin", adminRoutesV2);
 app.use("/api/goals", goalsRoutesV2);
-app.use("/api/legacy/goals", goalRoutes);
 app.use("/api/tracking", trackingRoutes);
 app.use("/api/six-month-review", sixMonthRoutesV2);
 app.use("/api/reviews", reviewRoutes);
-app.use("/api/self-appraisal", selfAppraisalRoutesV2);
-app.use("/api/ratings", ratingsRoutesV2);
+app.use("/api/self-appraisal", selfAppraisalRoutes);
+app.use("/api/ratings", ratingsRoutes);
 app.use("/api/notifications", notificationRoutes);
-app.use("/api/admin", adminRoutesV2);
-app.use("/api/legacy/admin", adminRoutes);
 app.use("/api/appraisals", appraisalRoutes);
+
+/**
+ * No-ORM mode (Neon/pg direct):
+ * We keep the server stable by mounting only SQL-migrated modules.
+ * Remaining modules will be mounted as 501 placeholders until migrated.
+ */
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.get("/api/health/db", async (req, res, next) => {
+  try {
+    const result = await pool.query("SELECT NOW() as now");
+    return res.json({ status: "ok", db: "connected", now: result.rows?.[0]?.now });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Note: authz is enforced within each router via `protect` + `authorise(...)`.
 
 app.use(notFound);
 app.use(errorHandler);

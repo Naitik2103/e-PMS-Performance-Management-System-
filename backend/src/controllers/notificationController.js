@@ -1,13 +1,28 @@
-import { Notification } from "../models.js";
+import pool from "../config/db.js";
 
 const listMyNotifications = async (req, res, next) => {
   try {
-    const notifications = await Notification.findAll({
-      where: { userId: req.user.id },
-      order: [["createdAt", "DESC"]],
-      limit: 100
-    });
-    return res.json(notifications);
+    const userId = req.user?.id || req.user?.userId;
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        subject AS title,
+        body_content AS message,
+        (status = 'read') AS "isRead",
+        NULL::timestamptz AS "readAt",
+        send_at AS "createdAt",
+        type,
+        entity_type AS entity,
+        entity_id AS "entityId"
+      FROM notifications
+      WHERE recipient_id = $1
+      ORDER BY send_at DESC
+      LIMIT 100
+      `,
+      [userId]
+    );
+    return res.json(rows);
   } catch (error) {
     return next(error);
   }
@@ -15,8 +30,12 @@ const listMyNotifications = async (req, res, next) => {
 
 const unreadCount = async (req, res, next) => {
   try {
-    const count = await Notification.count({ where: { userId: req.user.id, isRead: false } });
-    return res.json({ count });
+    const userId = req.user?.id || req.user?.userId;
+    const { rows } = await pool.query(
+      "SELECT COUNT(1)::int AS count FROM notifications WHERE recipient_id = $1 AND status = 'unread'",
+      [userId]
+    );
+    return res.json({ count: rows[0]?.count ?? 0 });
   } catch (error) {
     return next(error);
   }
@@ -24,16 +43,30 @@ const unreadCount = async (req, res, next) => {
 
 const markAsRead = async (req, res, next) => {
   try {
+    const userId = req.user?.id || req.user?.userId;
     const { id } = req.params;
-    const item = await Notification.findOne({ where: { id, userId: req.user.id } });
-    if (!item) {
-      res.status(404);
-      return next(new Error("Notification not found"));
+    const { rows } = await pool.query(
+      `
+      UPDATE notifications
+      SET status = 'read'
+      WHERE id = $1 AND recipient_id = $2
+      RETURNING
+        id,
+        subject AS title,
+        body_content AS message,
+        (status = 'read') AS "isRead",
+        NULL::timestamptz AS "readAt",
+        send_at AS "createdAt",
+        type,
+        entity_type AS entity,
+        entity_id AS "entityId"
+      `,
+      [id, userId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: "Notification not found" });
     }
-    item.isRead = true;
-    item.readAt = new Date();
-    await item.save();
-    return res.json(item);
+    return res.json(rows[0]);
   } catch (error) {
     return next(error);
   }

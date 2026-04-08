@@ -1,15 +1,45 @@
-import { Op } from "sequelize";
-import { PerformanceReview, User, AppraisalCycle } from "../models.js";
-import { ROLES, normalizeRole } from "../constants/rbac.js";
+import pool from "../config/db.js";
+import { ROLES, normalizeRole, roleMatches } from "../constants/rbac.js";
+
+const mapAppraisalRow = (r) => ({
+  ...r,
+  employee: {
+    id: r.employee_id,
+    name: `${r.first_name || ""} ${r.last_name || ""}`.trim() || r.email,
+    department: r.department
+  },
+  cycle: r.cycle_id
+    ? {
+        id: r.cycle_id,
+        name: r.cycle_name,
+        year: r.cycle_year ? Number(r.cycle_year) : null
+      }
+    : null
+});
 
 const listMine = async (req, res, next) => {
   try {
-    const reviews = await PerformanceReview.findAll({
-      where: { employeeId: req.user.userId },
-      include: [{ model: AppraisalCycle, as: "cycle" }],
-      order: [["createdAt", "DESC"]]
-    });
-    return res.json(reviews);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        a.*,
+        u.user_id AS employee_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department,
+        c.cycle_name,
+        c.cycle_year
+      FROM appraisals a
+      JOIN users u ON u.user_id = a.employee_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = a.cycle_id
+      WHERE a.employee_id = $1
+      ORDER BY a.created_at DESC
+      `,
+      [req.user.id]
+    );
+    return res.json(rows.map(mapAppraisalRow));
   } catch (error) {
     return next(error);
   }
@@ -17,12 +47,27 @@ const listMine = async (req, res, next) => {
 
 const listMyTeam = async (req, res, next) => {
   try {
-    const reports = await User.findAll({ where: { reportingTo: req.user.userId }, attributes: ["id"] });
-    const rows = await PerformanceReview.findAll({
-      where: { employeeId: reports.map((r) => r.id) },
-      include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }, { model: AppraisalCycle, as: "cycle" }]
-    });
-    return res.json(rows);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        a.*,
+        u.user_id AS employee_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department,
+        c.cycle_name,
+        c.cycle_year
+      FROM appraisals a
+      JOIN users u ON u.user_id = a.employee_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = a.cycle_id
+      WHERE a.ro_id = $1
+      ORDER BY a.created_at DESC
+      `,
+      [req.user.id]
+    );
+    return res.json(rows.map(mapAppraisalRow));
   } catch (error) {
     return next(error);
   }
@@ -30,13 +75,27 @@ const listMyTeam = async (req, res, next) => {
 
 const listMyReviewList = async (req, res, next) => {
   try {
-    const ros = await User.findAll({ where: { reportingTo: req.user.userId }, attributes: ["id"] });
-    const employees = await User.findAll({ where: { reportingTo: ros.map((r) => r.id) }, attributes: ["id"] });
-    const rows = await PerformanceReview.findAll({
-      where: { employeeId: employees.map((u) => u.id) },
-      include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }, { model: AppraisalCycle, as: "cycle" }]
-    });
-    return res.json(rows);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        a.*,
+        u.user_id AS employee_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department,
+        c.cycle_name,
+        c.cycle_year
+      FROM appraisals a
+      JOIN users u ON u.user_id = a.employee_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = a.cycle_id
+      WHERE a.revo_id = $1
+      ORDER BY a.created_at DESC
+      `,
+      [req.user.id]
+    );
+    return res.json(rows.map(mapAppraisalRow));
   } catch (error) {
     return next(error);
   }
@@ -44,11 +103,27 @@ const listMyReviewList = async (req, res, next) => {
 
 const listMyAcceptList = async (req, res, next) => {
   try {
-    const rows = await PerformanceReview.findAll({
-      where: { status: { [Op.in]: ["revo_rated", "ao_accepted", "completed"] } },
-      include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }, { model: AppraisalCycle, as: "cycle" }]
-    });
-    return res.json(rows);
+    const { rows } = await pool.query(
+      `
+      SELECT
+        a.*,
+        u.user_id AS employee_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department,
+        c.cycle_name,
+        c.cycle_year
+      FROM appraisals a
+      JOIN users u ON u.user_id = a.employee_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = a.cycle_id
+      WHERE a.ao_id = $1 AND a.status IN ('revo_rated', 'ao_accepted', 'completed')
+      ORDER BY a.created_at DESC
+      `,
+      [req.user.id]
+    );
+    return res.json(rows.map(mapAppraisalRow));
   } catch (error) {
     return next(error);
   }
@@ -56,21 +131,40 @@ const listMyAcceptList = async (req, res, next) => {
 
 const getSummary = async (req, res, next) => {
   try {
-    const review = await PerformanceReview.findByPk(req.params.id, {
-      include: [{ model: User, as: "employee", attributes: ["id", "name", "department"] }, { model: AppraisalCycle, as: "cycle" }]
-    });
-    if (!review) return res.status(404).json({ error: "Review not found" });
+    const { rows } = await pool.query(
+      `
+      SELECT
+        a.*,
+        u.user_id AS employee_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department,
+        c.cycle_name,
+        c.cycle_year
+      FROM appraisals a
+      JOIN users u ON u.user_id = a.employee_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = a.cycle_id
+      WHERE a.id = $1
+      LIMIT 1
+      `,
+      [req.params.id]
+    );
+    const appraisal = rows[0];
+    if (!appraisal) return res.status(404).json({ error: "Review not found" });
 
     const role = normalizeRole(req.user.role);
+    const userId = req.user.id;
     const allowed =
-      role === ROLES.HR_ADMIN ||
-      (role === ROLES.EMPLOYEE && review.employeeId === req.user.userId) ||
-      (role === ROLES.REPORTING_OFFICER && review.status) ||
-      (role === ROLES.REVIEWING_OFFICER && review.status) ||
-      (role === ROLES.ACCEPTING_OFFICER && review.status);
+      roleMatches(role, ROLES.HR_ADMIN) ||
+      (roleMatches(role, ROLES.EMPLOYEE) && appraisal.employee_id === userId) ||
+      (roleMatches(role, ROLES.REPORTING_OFFICER) && appraisal.ro_id === userId) ||
+      (roleMatches(role, ROLES.REVIEWING_OFFICER) && appraisal.revo_id === userId) ||
+      (roleMatches(role, ROLES.ACCEPTING_OFFICER) && appraisal.ao_id === userId);
     if (!allowed) return res.status(403).json({ error: "This appraisal is not assigned to you" });
 
-    return res.json(review);
+    return res.json(mapAppraisalRow(appraisal));
   } catch (error) {
     return next(error);
   }

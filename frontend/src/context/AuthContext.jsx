@@ -16,7 +16,13 @@ export const AuthProvider = ({ children }) => {
     }
     try {
       const response = await apiClient.get("/auth/me");
-      const nextUser = response.data.user ? { ...response.data.user, role: normalizeRole(response.data.user.role) } : null;
+      const nextUser = response.data.user
+        ? {
+            ...response.data.user,
+            role: normalizeRole(response.data.user.role),
+            availableRoles: (response.data.user.availableRoles || []).map((role) => normalizeRole(role))
+          }
+        : null;
       setUser(nextUser);
     } catch (error) {
       localStorage.removeItem("epms_token");
@@ -32,7 +38,27 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await apiClient.post("/auth/login", { email, password });
     localStorage.setItem("epms_token", response.data.token);
-    const nextUser = response.data.user ? { ...response.data.user, role: normalizeRole(response.data.user.role) } : null;
+    const nextUser = response.data.user
+      ? {
+          ...response.data.user,
+          role: normalizeRole(response.data.user.role),
+          availableRoles: (response.data.user.availableRoles || []).map((role) => normalizeRole(role))
+        }
+      : null;
+    setUser(nextUser);
+    return nextUser;
+  };
+
+  const selectRole = async (role) => {
+    const response = await apiClient.post("/auth/select-role", { role });
+    localStorage.setItem("epms_token", response.data.token);
+    const nextUser = response.data.user
+      ? {
+          ...response.data.user,
+          role: normalizeRole(response.data.user.role),
+          availableRoles: (response.data.user.availableRoles || []).map((item) => normalizeRole(item))
+        }
+      : null;
     setUser(nextUser);
     return nextUser;
   };
@@ -45,7 +71,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, selectRole }}>
       {children}
     </AuthContext.Provider>
   );

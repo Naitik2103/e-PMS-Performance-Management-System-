@@ -69,6 +69,63 @@ const seed = async () => {
       reportingTo: reportingOfficer.id
     });
 
+    const multiRolePassword = await User.hashPassword("Password123!");
+    const multiRoleUser = await User.create({
+      firstName: "Maya",
+      lastName: "MultiRole",
+      name: "Maya MultiRole",
+      email: "multirole@epms.local",
+      passwordHash: multiRolePassword,
+      role: ROLES.EMPLOYEE,
+      department: "Computer Science"
+    });
+
+    // Make Maya a Reporting Officer by assigning direct reports.
+    await User.create({
+      firstName: "Dev",
+      lastName: "Report1",
+      name: "Dev Report1",
+      email: "report1@epms.local",
+      passwordHash: employeePassword,
+      role: ROLES.EMPLOYEE,
+      department: "Computer Science",
+      reportingTo: multiRoleUser.id
+    });
+    await User.create({
+      firstName: "Dev",
+      lastName: "Report2",
+      name: "Dev Report2",
+      email: "report2@epms.local",
+      passwordHash: employeePassword,
+      role: ROLES.EMPLOYEE,
+      department: "Computer Science",
+      reportingTo: multiRoleUser.id
+    });
+
+    // Make Maya a Reviewing Officer by assigning an RO under her.
+    await User.create({
+      firstName: "Ron",
+      lastName: "ROUnderMaya",
+      name: "Ron ROUnderMaya",
+      email: "ro-under-maya@epms.local",
+      passwordHash: reportingPassword,
+      role: ROLES.REPORTING_OFFICER,
+      department: "Computer Science",
+      reportingTo: multiRoleUser.id
+    });
+
+    // Make Maya an Accepting Officer by assigning an employee who has Maya as accepting officer.
+    await User.create({
+      firstName: "Ann",
+      lastName: "AOUnderMaya",
+      name: "Ann AOUnderMaya",
+      email: "ao-under-maya@epms.local",
+      passwordHash: employeePassword,
+      role: ROLES.EMPLOYEE,
+      department: "Computer Science",
+      acceptingOfficerId: multiRoleUser.id
+    });
+
     const year = new Date().getFullYear();
     const cycle = await AppraisalCycle.create({
       name: `Annual Appraisal ${year}`,
@@ -100,6 +157,7 @@ const seed = async () => {
       reviewingOfficer: reviewingOfficer.email,
       reportingOfficer: reportingOfficer.email,
       employee: employee.email,
+      multiRoleUser: multiRoleUser.email,
       activeCycle: cycle.name
     });
 

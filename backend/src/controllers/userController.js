@@ -1,51 +1,79 @@
-import { User } from "../models.js";
+import bcrypt from "bcryptjs";
+import pool from "../config/db.js";
 import { ROLES, normalizeRole } from "../constants/rbac.js";
-import { Op, fn, col } from "sequelize";
 
-const getDisplayName = (user) => {
-  const first = (user.firstName || "").trim();
-  const last = (user.lastName || "").trim();
-  if (first || last) return `${first} ${last}`.trim();
-  return user.name;
+const displayNameFromParts = (firstName, lastName, email) => {
+  const name = `${(firstName || "").trim()} ${(lastName || "").trim()}`.trim();
+  return name || email;
+};
+
+const ensureDepartmentId = async (departmentName) => {
+  const name = (departmentName || "").trim();
+  if (!name) return null;
+  const existing = await pool.query("SELECT id FROM departments WHERE name = $1 LIMIT 1", [name]);
+  if (existing.rows[0]?.id) return existing.rows[0].id;
+
+  const code = name.toUpperCase().replace(/[^A-Z0-9]+/g, "_").slice(0, 10) || "DEPT";
+  const created = await pool.query(
+    "INSERT INTO departments (name, code, is_active) VALUES ($1, $2, true) RETURNING id",
+    [name, code]
+  );
+  return created.rows[0].id;
 };
 
 const createUser = async (req, res, next) => {
   try {
-    const { firstName, lastName, name, email, password, role, department, reportingTo, reviewingOfficerId, acceptingOfficerId } = req.body;
-    const existing = await User.findOne({ where: { email: email.toLowerCase() } });
-    if (existing) {
+    const { firstName, lastName, email, password, role, department, reportingTo, reviewingOfficerId, acceptingOfficerId } = req.body;
+    const emailValue = (email || "").toLowerCase();
+
+    const exists = await pool.query("SELECT 1 FROM users WHERE LOWER(email) = $1 LIMIT 1", [emailValue]);
+    if (exists.rows.length) {
       res.status(409);
       return next(new Error("User with this email already exists"));
     }
 
-    const passwordHash = await User.hashPassword(password);
-    const resolvedFirstName = (firstName || "").trim();
-    const resolvedLastName = (lastName || "").trim();
-    const resolvedName = name || `${resolvedFirstName} ${resolvedLastName}`.trim();
-    const user = await User.create({
-      firstName: resolvedFirstName || null,
-      lastName: resolvedLastName || null,
-      name: resolvedName,
-      email: email.toLowerCase(),
-      passwordHash,
-      role: normalizeRole(role || ROLES.EMPLOYEE),
-      department,
-      reportingTo: reportingTo || null,
-      reviewingOfficerId: reviewingOfficerId || null,
-      acceptingOfficerId: acceptingOfficerId || null
-    });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const departmentId = await ensureDepartmentId(department);
+    const normalizedRole = normalizeRole(role || ROLES.EMPLOYEE);
+
+    const inserted = await pool.query(
+      `
+      INSERT INTO users
+        (first_name, last_name, email, password_hash, role, department_id, ro_id, rew_id, ao_id, is_active)
+      VALUES
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
+      RETURNING user_id, first_name, last_name, email, role, ro_id, rew_id, ao_id, department_id, is_active
+      `,
+      [
+        (firstName || "").trim() || null,
+        (lastName || "").trim() || null,
+        emailValue,
+        passwordHash,
+        normalizedRole,
+        departmentId,
+        reportingTo || null,
+        reviewingOfficerId || null,
+        acceptingOfficerId || null
+      ]
+    );
+
+    const row = inserted.rows[0];
+    const dept = departmentId
+      ? await pool.query("SELECT name FROM departments WHERE id = $1 LIMIT 1", [departmentId])
+      : { rows: [] };
 
     return res.status(201).json({
-      id: user.id,
-      name: getDisplayName(user),
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      department: user.department,
-      reportingTo: user.reportingTo,
-      reviewingOfficerId: user.reviewingOfficerId,
-      acceptingOfficerId: user.acceptingOfficerId
+      id: row.user_id,
+      name: displayNameFromParts(row.first_name, row.last_name, row.email),
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      role: row.role,
+      department: dept.rows[0]?.name || department || null,
+      reportingTo: row.ro_id,
+      reviewingOfficerId: row.rew_id,
+      acceptingOfficerId: row.ao_id,
+      isActive: row.is_active
     });
   } catch (error) {
     return next(error);
@@ -54,78 +82,43 @@ const createUser = async (req, res, next) => {
 
 const listUsers = async (req, res, next) => {
   try {
-    const { role, department } = req.query;
-    const filter = {};
-    if (role) filter.role = normalizeRole(role);
-    if (department) filter.department = department;
+    const role = req.query.role ? normalizeRole(req.query.role) : null;
+    const { rows } = await pool.query(
+      `
+      SELECT
+        u.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.role,
+        u.ro_id,
+        u.rew_id,
+        u.ao_id,
+        u.is_active,
+        d.name AS department
+      FROM users u
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE ($1::text IS NULL OR u.role = $1)
+      ORDER BY u.created_at DESC
+      `,
+      [role]
+    );
 
-    const users = await User.findAll({
-      where: filter,
-      attributes: { exclude: ["passwordHash"] },
-      order: [["createdAt", "DESC"]]
-    });
-    return res.json(users.map((user) => ({
-      ...user.toJSON(),
-      name: getDisplayName(user)
-    })));
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const updateUser = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    if (updates.email) {
-      delete updates.email;
-    }
-    if (updates.password) {
-      delete updates.password;
-    }
-
-    const user = await User.findByPk(id);
-    if (!user) {
-      res.status(404);
-      return next(new Error("User not found"));
-    }
-    if (updates.role) {
-      updates.role = normalizeRole(updates.role);
-    }
-    if (updates.firstName || updates.lastName) {
-      const nextFirst = (updates.firstName ?? user.firstName ?? "").trim();
-      const nextLast = (updates.lastName ?? user.lastName ?? "").trim();
-      updates.name = `${nextFirst} ${nextLast}`.trim() || user.name;
-    }
-    await user.update(updates);
-    const sanitized = user.toJSON();
-    delete sanitized.passwordHash;
-    sanitized.name = getDisplayName(user);
-    return res.json(sanitized);
-  } catch (error) {
-    return next(error);
-  }
-};
-
-const hierarchy = async (req, res, next) => {
-  try {
-    const users = await User.findAll({ attributes: { exclude: ["passwordHash"] } });
-    const plainUsers = users.map((user) => ({ ...user.toJSON(), name: getDisplayName(user) }));
-    const byId = new Map(plainUsers.map((user) => [user.id, user]));
-    const tree = [];
-
-    plainUsers.forEach((user) => {
-      const managerId = user.reportingTo || null;
-      if (managerId && byId.has(managerId)) {
-        const manager = byId.get(managerId);
-        manager.reports = manager.reports || [];
-        manager.reports.push(user);
-      } else {
-        tree.push(user);
-      }
-    });
-
-    return res.json(tree);
+    return res.json(
+      rows.map((u) => ({
+        id: u.user_id,
+        name: displayNameFromParts(u.first_name, u.last_name, u.email),
+        firstName: u.first_name,
+        lastName: u.last_name,
+        email: u.email,
+        role: u.role,
+        department: u.department,
+        reportingTo: u.ro_id,
+        reviewingOfficerId: u.rew_id,
+        acceptingOfficerId: u.ao_id,
+        isActive: u.is_active
+      }))
+    );
   } catch (error) {
     return next(error);
   }
@@ -133,12 +126,110 @@ const hierarchy = async (req, res, next) => {
 
 const listDepartments = async (req, res, next) => {
   try {
-    const rows = await User.findAll({
-      attributes: [[fn("DISTINCT", col("department")), "department"]],
-      where: { department: { [Op.ne]: null } },
-      order: [["department", "ASC"]]
+    const { rows } = await pool.query("SELECT name FROM departments WHERE is_active = true ORDER BY name ASC");
+    return res.json(rows.map((r) => r.name));
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const updateUser = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+
+    const existing = await pool.query(
+      `
+      SELECT user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active
+      FROM users
+      WHERE user_id = $1
+      LIMIT 1
+      `,
+      [id]
+    );
+    if (!existing.rows.length) {
+      res.status(404);
+      return next(new Error("User not found"));
+    }
+
+    const departmentId =
+      req.body.department !== undefined ? await ensureDepartmentId(req.body.department) : existing.rows[0].department_id;
+    const normalizedRole = req.body.role !== undefined ? normalizeRole(req.body.role) : existing.rows[0].role;
+
+    const reportingTo = req.body.reportingTo !== undefined ? req.body.reportingTo || null : existing.rows[0].ro_id;
+    const reviewingOfficerId =
+      req.body.reviewingOfficerId !== undefined ? req.body.reviewingOfficerId || null : existing.rows[0].rew_id;
+    const acceptingOfficerId =
+      req.body.acceptingOfficerId !== undefined ? req.body.acceptingOfficerId || null : existing.rows[0].ao_id;
+
+    const updated = await pool.query(
+      `
+      UPDATE users SET
+        role = $2,
+        department_id = $3,
+        ro_id = $4,
+        rew_id = $5,
+        ao_id = $6,
+        updated_at = NOW()
+      WHERE user_id = $1
+      RETURNING user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active
+      `,
+      [id, normalizedRole, departmentId, reportingTo, reviewingOfficerId, acceptingOfficerId]
+    );
+
+    const row = updated.rows[0];
+    const dept = row.department_id
+      ? await pool.query("SELECT name FROM departments WHERE id = $1 LIMIT 1", [row.department_id])
+      : { rows: [] };
+
+    return res.json({
+      id: row.user_id,
+      name: displayNameFromParts(row.first_name, row.last_name, row.email),
+      firstName: row.first_name,
+      lastName: row.last_name,
+      email: row.email,
+      role: row.role,
+      department: dept.rows[0]?.name || null,
+      reportingTo: row.ro_id,
+      reviewingOfficerId: row.rew_id,
+      acceptingOfficerId: row.ao_id,
+      isActive: row.is_active
     });
-    return res.json(rows.map((row) => row.get("department")).filter(Boolean));
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const hierarchy = async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT user_id, first_name, last_name, email, role, ro_id, is_active
+      FROM users
+      WHERE is_active = true
+      ORDER BY created_at ASC
+      `
+    );
+
+    const nodesById = new Map();
+    for (const u of rows) {
+      nodesById.set(u.user_id, {
+        id: u.user_id,
+        name: displayNameFromParts(u.first_name, u.last_name, u.email),
+        role: u.role,
+        reports: []
+      });
+    }
+
+    const roots = [];
+    for (const u of rows) {
+      const node = nodesById.get(u.user_id);
+      const managerId = u.ro_id;
+      const manager = managerId ? nodesById.get(managerId) : null;
+      if (manager) manager.reports.push(node);
+      else roots.push(node);
+    }
+
+    return res.json(roots);
   } catch (error) {
     return next(error);
   }

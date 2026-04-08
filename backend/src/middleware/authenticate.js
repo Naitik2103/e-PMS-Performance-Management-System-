@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
-import { User } from "../models.js";
 import { normalizeRole } from "../constants/rbac.js";
+import pool from "../config/db.js";
 
 const authenticate = async (req, res, next) => {
   try {
@@ -30,14 +30,18 @@ const authenticate = async (req, res, next) => {
     }
 
     const userId = decoded.userId || decoded.id;
-    const user = await User.findByPk(userId, { attributes: ["id", "email", "role", "isActive"] });
-    if (!user || !user.isActive) {
+    const { rows } = await pool.query(
+      "SELECT user_id, email, role, is_active FROM users WHERE user_id = $1 LIMIT 1",
+      [userId]
+    );
+    const user = rows[0];
+    if (!user || !user.is_active) {
       return res.status(401).json({ error: "Invalid token" });
     }
 
     req.user = {
-      userId: user.id,
-      id: user.id,
+      userId: user.user_id,
+      id: user.user_id,
       role: normalizeRole(decoded.role || user.role),
       email: decoded.email || user.email
     };
