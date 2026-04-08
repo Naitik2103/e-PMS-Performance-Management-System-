@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { ROLES } from "../constants/rbac";
+import { roleHomePath } from "../rbac/accessMap";
 
 const Login = () => {
   const { login } = useAuth();
@@ -11,22 +11,14 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const roleRedirects = {
-    [ROLES.EMPLOYEE]: "/dashboard/employee",
-    [ROLES.REPORTING_OFFICER]: "/dashboard/ro",
-    [ROLES.REVIEWING_OFFICER]: "/dashboard/revo",
-    [ROLES.ACCEPTING_OFFICER]: "/dashboard/ao",
-    [ROLES.HR_ADMIN]: "/dashboard/admin",
-  };
-
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const user = await login(email, password);
-      if (user) {
-        navigate(roleRedirects[user.role] || "/dashboard");
+      const result = await login(email, password);
+      if (result?.type === "auth") {
+        navigate(roleHomePath(result.user?.selectedRole || result.user?.role), { replace: true });
       }
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Login failed");

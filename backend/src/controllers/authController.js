@@ -5,40 +5,93 @@ import pool from "../config/db.js";
 import bcrypt from "bcryptjs";
 
 const tokenTtlMs = Number(process.env.JWT_EXPIRES_MS || 8 * 60 * 60 * 1000);
+const preAuthTtlSec = Number(process.env.PREAUTH_EXPIRES_IN_SECONDS || 5 * 60);
 
-const generateToken = (user, tokenId, activeRole) =>
-  jwt.sign({ userId: user.user_id, id: user.user_id, role: normalizeRole(activeRole || user.role), email: user.email, jti: tokenId }, process.env.JWT_SECRET, {
+const generateAuthToken = ({ user, tokenId, selectedRole, availableRoles }) =>
+  jwt.sign(
+    {
+      userId: user.user_id,
+      id: user.user_id,
+      selectedRole: normalizeRole(selectedRole || user.role),
+      role: normalizeRole(selectedRole || user.role),
+      availableRoles: (availableRoles || []).map((r) => normalizeRole(r)),
+      email: user.email,
+      jti: tokenId
+    },
+    process.env.JWT_SECRET,
+    {
     expiresIn: process.env.JWT_EXPIRES_IN || "8h"
-  });
+    }
+  );
 
-const getAvailableRoles = async (user) => {
-  const normalizedPrimary = normalizeRole(user.role);
-  const roles = new Set();
+// Note: Pre-auth token support is retained for future use, but the current UX
+// logs in as Employee by default and relies on in-session switching.
+const generatePreAuthToken = ({ user, tokenId, availableRoles }) =>
+  jwt.sign(
+    {
+      userId: user.user_id,
+      id: user.user_id,
+      stage: "preauth",
+      availableRoles: (availableRoles || []).map((r) => normalizeRole(r)),
+      email: user.email,
+      jti: tokenId
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: preAuthTtlSec }
+  );
 
-  // Employee should be shown only if the user can act as employee (default for most users).
-  if (normalizedPrimary === ROLES.EMPLOYEE || normalizedPrimary === ROLES.HR_ADMIN) {
-    roles.add(ROLES.EMPLOYEE);
+const getActiveCycleId = async () => {
+  const r = await pool.query("SELECT cycle_id FROM appraisal_cycles WHERE closed_at IS NULL ORDER BY created_at DESC LIMIT 1");
+  return r.rows[0]?.cycle_id || null;
+};
+
+const getAvailableRolesForActiveCycle = async (userId, primaryRole) => {
+  const roles = new Set([ROLES.EMPLOYEE]);
+  const normalizedPrimary = normalizeRole(primaryRole);
+  if (normalizedPrimary === ROLES.HR_ADMIN) return [ROLES.HR_ADMIN];
+
+  const cycleId = await getActiveCycleId();
+  if (!cycleId) {
+    // No active cycle: still allow employee context so user can log in, but no officer contexts.
+    return Array.from(roles);
   }
 
-  if (normalizedPrimary === ROLES.HR_ADMIN) {
-    roles.add(ROLES.HR_ADMIN);
-  }
-
-  const [roReportCount, reviewingAssigneeCount, acceptingAssigneeCount] = await Promise.all([
-    pool.query("SELECT COUNT(1)::int AS c FROM users WHERE is_active = true AND ro_id = $1", [user.user_id]),
-    pool.query("SELECT COUNT(1)::int AS c FROM users WHERE is_active = true AND rew_id = $1", [user.user_id]),
-    pool.query("SELECT COUNT(1)::int AS c FROM users WHERE is_active = true AND ao_id = $1", [user.user_id])
+  const [ro, revo, ao] = await Promise.all([
+    pool.query(
+      "SELECT 1 FROM appraisal_cycle_participants WHERE cycle_id = $1 AND reporting_officer_id = $2 LIMIT 1",
+      [cycleId, userId]
+    ),
+    pool.query(
+      "SELECT 1 FROM appraisal_cycle_participants WHERE cycle_id = $1 AND reviewing_officer_id = $2 LIMIT 1",
+      [cycleId, userId]
+    ),
+    pool.query(
+      "SELECT 1 FROM appraisal_cycle_participants WHERE cycle_id = $1 AND accepting_officer_id = $2 LIMIT 1",
+      [cycleId, userId]
+    )
   ]);
 
-  if (normalizedPrimary === ROLES.REPORTING_OFFICER || roReportCount.rows?.[0]?.c > 0) roles.add(ROLES.REPORTING_OFFICER);
-  if (normalizedPrimary === ROLES.REVIEWING_OFFICER || reviewingAssigneeCount.rows?.[0]?.c > 0) roles.add(ROLES.REVIEWING_OFFICER);
-  if (normalizedPrimary === ROLES.ACCEPTING_OFFICER || acceptingAssigneeCount.rows?.[0]?.c > 0) roles.add(ROLES.ACCEPTING_OFFICER);
+  if (ro.rows.length) roles.add(ROLES.REPORTING_OFFICER);
+  if (revo.rows.length) roles.add(ROLES.REVIEWING_OFFICER);
+  if (ao.rows.length) roles.add(ROLES.ACCEPTING_OFFICER);
 
-  // If user is not employee/admin, still allow their primary role at minimum.
-  if (!roles.size) roles.add(normalizedPrimary);
+  // Always include their primary role if it's a known role (legacy DB values normalized).
+  if (Object.values(ROLES).includes(normalizedPrimary)) roles.add(normalizedPrimary);
 
   return Array.from(roles);
 };
+
+const mapUserResponse = ({ user, selectedRole, availableRoles }) => ({
+  id: user.user_id,
+  userId: user.user_id,
+  name: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email,
+  email: user.email,
+  role: normalizeRole(selectedRole),
+  selectedRole: normalizeRole(selectedRole),
+  availableRoles: (availableRoles || []).map((r) => normalizeRole(r)),
+  department: user.department,
+  reportingTo: user.ro_id
+});
 
 const login = async (req, res, next) => {
   try {
@@ -71,30 +124,28 @@ const login = async (req, res, next) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    const availableRoles = await getAvailableRoles(user);
     const primary = normalizeRole(user.role);
-    const defaultRole = availableRoles.includes(primary) ? primary : availableRoles[0];
-    const tokenId = crypto.randomUUID();
-    const token = generateToken(user, tokenId, defaultRole);
+    if (primary === ROLES.HR_ADMIN) {
+      const availableRoles = [ROLES.HR_ADMIN];
+      const tokenId = crypto.randomUUID();
+      const token = generateAuthToken({ user, tokenId, selectedRole: ROLES.HR_ADMIN, availableRoles });
+      await pool.query("INSERT INTO auth_sessions (user_id, token_id, expires_at) VALUES ($1, $2, $3)", [
+        user.user_id,
+        tokenId,
+        new Date(Date.now() + tokenTtlMs)
+      ]);
+      return res.json({ token, user: mapUserResponse({ user, selectedRole: ROLES.HR_ADMIN, availableRoles }) });
+    }
 
+    const availableRoles = await getAvailableRolesForActiveCycle(user.user_id, user.role);
+    const tokenId = crypto.randomUUID();
+    const token = generateAuthToken({ user, tokenId, selectedRole: ROLES.EMPLOYEE, availableRoles });
     await pool.query("INSERT INTO auth_sessions (user_id, token_id, expires_at) VALUES ($1, $2, $3)", [
       user.user_id,
       tokenId,
       new Date(Date.now() + tokenTtlMs)
     ]);
-
-    return res.json({
-      token,
-      user: {
-        id: user.user_id,
-        name: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email,
-        email: user.email,
-        role: defaultRole,
-        availableRoles,
-        department: user.department,
-        reportingTo: user.ro_id
-      }
-    });
+    return res.json({ token, user: mapUserResponse({ user, selectedRole: ROLES.EMPLOYEE, availableRoles }) });
   } catch (error) {
     return next(error);
   }
@@ -146,17 +197,17 @@ const me = async (req, res, next) => {
     if (!dbUser || !dbUser.is_active) {
       return res.status(401).json({ error: "Invalid token" });
     }
-    const availableRoles = await getAvailableRoles(dbUser);
+    const availableRoles =
+      normalizeRole(dbUser.role) === ROLES.HR_ADMIN
+        ? [ROLES.HR_ADMIN]
+        : await getAvailableRolesForActiveCycle(dbUser.user_id, dbUser.role);
     return res.json({
       user: {
-        id: dbUser.user_id,
-        userId: dbUser.user_id,
-        name: `${dbUser.first_name || ""} ${dbUser.last_name || ""}`.trim() || dbUser.email,
-        email: dbUser.email,
-        role: normalizeRole(req.user.role || dbUser.role),
-        availableRoles,
-        department: dbUser.department,
-        reportingTo: dbUser.ro_id
+        ...mapUserResponse({
+          user: dbUser,
+          selectedRole: req.user.selectedRole || req.user.role || dbUser.role,
+          availableRoles
+        })
       }
     });
   } catch (error) {
@@ -166,6 +217,9 @@ const me = async (req, res, next) => {
 
 const selectRole = async (req, res, next) => {
   try {
+    if (req.authClaims?.stage !== "preauth") {
+      return res.status(401).json({ error: "Invalid token" });
+    }
     const requestedRole = normalizeRole(req.body?.role);
     const { rows } = await pool.query(
       `
@@ -192,13 +246,13 @@ const selectRole = async (req, res, next) => {
       return res.status(401).json({ error: "Invalid token" });
     }
 
-    const availableRoles = await getAvailableRoles(user);
+    const availableRoles = await getAvailableRolesForActiveCycle(user.user_id, user.role);
     if (!availableRoles.includes(requestedRole)) {
       return res.status(403).json({ error: "You do not have permission to use this role" });
     }
 
     const tokenId = crypto.randomUUID();
-    const token = generateToken(user, tokenId, requestedRole);
+    const token = generateAuthToken({ user, tokenId, selectedRole: requestedRole, availableRoles });
     await pool.query("INSERT INTO auth_sessions (user_id, token_id, expires_at) VALUES ($1, $2, $3)", [
       user.user_id,
       tokenId,
@@ -207,19 +261,61 @@ const selectRole = async (req, res, next) => {
 
     return res.json({
       token,
-      user: {
-        id: user.user_id,
-        name: `${user.first_name || ""} ${user.last_name || ""}`.trim() || user.email,
-        email: user.email,
-        role: requestedRole,
-        availableRoles,
-        department: user.department,
-        reportingTo: user.ro_id
-      }
+      user: mapUserResponse({ user, selectedRole: requestedRole, availableRoles })
     });
   } catch (error) {
     return next(error);
   }
 };
 
-export { login, logout, me, selectRole };
+const switchRole = async (req, res, next) => {
+  try {
+    if (req.authClaims?.stage === "preauth") {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    const requestedRole = normalizeRole(req.body?.role);
+    if (!requestedRole) return res.status(400).json({ error: "Role is required" });
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        u.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        u.role,
+        u.ro_id,
+        d.name AS department,
+        u.is_active
+      FROM users u
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE u.user_id = $1
+      LIMIT 1
+      `,
+      [req.user.id]
+    );
+    const user = rows[0];
+    if (!user || !user.is_active) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    const availableRoles = await getAvailableRolesForActiveCycle(user.user_id, user.role);
+    if (!availableRoles.includes(requestedRole)) {
+      return res.status(403).json({ error: "You do not have permission to use this role" });
+    }
+
+    const tokenId = crypto.randomUUID();
+    const token = generateAuthToken({ user, tokenId, selectedRole: requestedRole, availableRoles });
+    await pool.query("INSERT INTO auth_sessions (user_id, token_id, expires_at) VALUES ($1, $2, $3)", [
+      user.user_id,
+      tokenId,
+      new Date(Date.now() + tokenTtlMs)
+    ]);
+
+    return res.json({ token, user: mapUserResponse({ user, selectedRole: requestedRole, availableRoles }) });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export { login, logout, me, selectRole, switchRole };

@@ -1,7 +1,7 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Bell, ChevronDown } from "lucide-react";
+import { Bell, ChevronDown, Check } from "lucide-react";
 import { apiClient } from "../api/client";
 import { roleLabel } from "../constants/rbac";
 
@@ -21,14 +21,17 @@ const pageTitles = {
 };
 
 const Topbar = () => {
-  const { user } = useAuth();
+  const { user, switchRole } = useAuth();
   const location = useLocation();
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [profileOpen, setProfileOpen] = React.useState(false);
+  const [roleOpen, setRoleOpen] = React.useState(false);
+  const [switching, setSwitching] = React.useState(false);
   const [notifications, setNotifications] = React.useState([]);
   const notifRef = React.useRef(null);
   const profileRef = React.useRef(null);
+  const roleRef = React.useRef(null);
   const title = pageTitles[location.pathname] || "e-PMS";
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
@@ -65,12 +68,30 @@ const Topbar = () => {
       if (profileRef.current && !profileRef.current.contains(event.target)) {
         setProfileOpen(false);
       }
+      if (roleRef.current && !roleRef.current.contains(event.target)) {
+        setRoleOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const currentRoleLabel = roleLabel(user?.role);
+  const currentRole = user?.selectedRole || user?.role;
+  const currentRoleLabel = roleLabel(currentRole);
+  const availableRoles = Array.isArray(user?.availableRoles) ? user.availableRoles : [];
+
+  const handleSwitchRole = async (role) => {
+    if (!role || role === currentRole) return;
+    setSwitching(true);
+    try {
+      await switchRole(role);
+      setRoleOpen(false);
+    } catch {
+      // If switching fails, keep current session; UI remains usable.
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   const markAsRead = async (id) => {
     try {
@@ -89,6 +110,46 @@ const Topbar = () => {
         <p className="topbar-date">{today}</p>
       </div>
       <div className="topbar-right">
+        {user && availableRoles.length > 1 && (
+          <div className="topbar-profile-wrap" ref={roleRef}>
+            <button
+              className="topbar-user-pill topbar-user-pill-btn"
+              type="button"
+              onClick={() => setRoleOpen((prev) => !prev)}
+              disabled={switching}
+              title="Switch role"
+            >
+              <div>
+                <div className="topbar-name">Role</div>
+                <div className="topbar-role">{currentRoleLabel}</div>
+              </div>
+              <ChevronDown size={14} className={`topbar-profile-chevron${roleOpen ? " open" : ""}`} />
+            </button>
+            {roleOpen && (
+              <div className="topbar-profile-panel">
+                <div className="topbar-notif-panel-head">Switch context</div>
+                <div className="topbar-notif-list">
+                  {availableRoles.map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      className={`topbar-notif-item${r === currentRole ? " unread" : ""}`}
+                      onClick={() => handleSwitchRole(r)}
+                      disabled={switching}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+                    >
+                      <div>
+                        <div className="topbar-notif-title">{roleLabel(r)}</div>
+                        <div className="topbar-notif-message">{r === currentRole ? "Current role" : "Switch to this role"}</div>
+                      </div>
+                      {r === currentRole && <Check size={16} />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="topbar-notif-wrap" ref={notifRef}>
           <button className="topbar-icon-btn" title="Notifications" onClick={() => setNotifOpen((prev) => !prev)}>
             <Bell size={18} />

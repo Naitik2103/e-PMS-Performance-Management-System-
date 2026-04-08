@@ -4,6 +4,7 @@ import { writeAudit } from "../services/auditService.js";
 import { notifyUser } from "../services/notificationService.js";
 import { ROLES, roleMatches } from "../constants/rbac.js";
 import { computeScore } from "../services/scoreEngine.js";
+import { ensureIsROForAppraisal, ensureIsRevOForAppraisal, ensureIsAOForAppraisal } from "../services/relationshipGuards.js";
 
 let schemaEnsured = false;
 
@@ -249,7 +250,8 @@ const rateByRO = async (req, res, next) => {
         current: appraisal.status
       });
     }
-    if (appraisal.ro_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    const ownership = await ensureIsROForAppraisal(appraisal.id, req.user.userId);
+    if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
 
     await pool.query("UPDATE appraisal_goal_ratings SET ro_rating = $1, updated_at = NOW() WHERE appraisal_id = $2", [
       Number(score || 0),
@@ -311,7 +313,8 @@ const reviewByReviewing = async (req, res, next) => {
         current: appraisal.status
       });
     }
-    if (appraisal.revo_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    const ownership = await ensureIsRevOForAppraisal(appraisal.id, req.user.userId);
+    if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
 
     // RevO sets its own rating (does not expose RO values while editing; handled in getRevoForm)
     await pool.query(
@@ -377,7 +380,8 @@ const acceptByAccepting = async (req, res, next) => {
         current: appraisal.status
       });
     }
-    if (appraisal.ao_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
+    const ownership = await ensureIsAOForAppraisal(appraisal.id, req.user.userId);
+    if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
 
     const client = await pool.connect();
     try {

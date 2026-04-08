@@ -6,6 +6,7 @@ import { roleHomePath } from "../rbac/accessMap";
 
 const Unauthorized = () => {
   const { user } = useAuth();
+  const activeRole = user?.selectedRole || user?.role;
 
   return (
     <div className="page">
@@ -15,15 +16,15 @@ const Unauthorized = () => {
         </div>
         <p style={{ color: "var(--grey-600)", lineHeight: 1.7 }}>
           You do not have permission to view this page.
-          {user?.role ? (
+          {activeRole ? (
             <>
               {" "}
-              Your current role is <strong>{roleLabel(user.role)}</strong>.
+              Your current role is <strong>{roleLabel(activeRole)}</strong>.
             </>
           ) : null}
         </p>
         <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-          <Link className="btn" to={user ? roleHomePath(user.role) : "/login"}>
+          <Link className="btn" to={user ? roleHomePath(activeRole) : "/login"}>
             Go to Dashboard
           </Link>
           <Link className="btn btn-secondary" to="/">

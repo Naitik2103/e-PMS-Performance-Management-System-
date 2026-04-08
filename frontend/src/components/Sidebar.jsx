@@ -1,89 +1,17 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Target,
-  BarChart2,
-  ClipboardList,
-  Users,
-  UserPlus,
-  CalendarDays,
-  Network,
   LogOut,
   ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { ROLES, roleLabel } from "../constants/rbac";
-
-const roleHomeMap = {
-  [ROLES.EMPLOYEE]: "/dashboard",
-  [ROLES.REPORTING_OFFICER]: "/reporting-dashboard",
-  [ROLES.REVIEWING_OFFICER]: "/reviewing-dashboard",
-  [ROLES.ACCEPTING_OFFICER]: "/accepting-dashboard",
-  [ROLES.HR_ADMIN]: "/admin-dashboard",
-};
-
-const navItems = [
-  {
-    to: (role) => roleHomeMap[role] || "/dashboard",
-    icon: LayoutDashboard,
-    label: "Dashboard",
-    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER, ROLES.HR_ADMIN],
-  },
-  {
-    to: "/goals",
-    icon: Target,
-    label: "Goals",
-    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER],
-  },
-  {
-    to: "/tracking",
-    icon: BarChart2,
-    label: "Six-Month Tracking",
-    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER],
-  },
-  {
-    to: "/reviews",
-    icon: ClipboardList,
-    label: "Year-End Reviews",
-    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER],
-  },
-  {
-    to: "/admin-dashboard",
-    icon: Users,
-    label: "Admin Panel",
-    roles: [ROLES.HR_ADMIN],
-  },
-  {
-    to: "/admin/create-user",
-    icon: UserPlus,
-    label: "Create New User",
-    roles: [ROLES.HR_ADMIN],
-  },
-  {
-    to: "/admin/cycles",
-    icon: CalendarDays,
-    label: "Appraisal Cycle Management",
-    roles: [ROLES.HR_ADMIN],
-  },
-  {
-    to: "/admin/all-users",
-    icon: Users,
-    label: "All Users",
-    roles: [ROLES.HR_ADMIN],
-  },
-  {
-    to: "/admin/hierarchy",
-    icon: Network,
-    label: "Reporting Hierarchy",
-    roles: [ROLES.HR_ADMIN],
-  },
-];
+import { roleLabel } from "../constants/rbac";
+import { sidebarItems } from "../rbac/accessMap";
 
 const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const role = user?.role;
+  const role = user?.selectedRole || user?.role;
 
   const handleLogout = () => {
     logout();
@@ -102,13 +30,13 @@ const Sidebar = () => {
       </div>
 
       <nav className="sidebar-nav">
-        {navItems
+        {sidebarItems
           .filter((item) => !role || item.roles.includes(role))
           .map((item) => {
             const to = typeof item.to === "function" ? item.to(role) : item.to;
             const Icon = item.icon;
             return (
-              <NavLink key={to} to={to} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
+              <NavLink key={item.key} to={to} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
                 <Icon size={18} className="sidebar-icon" />
                 <span>{item.label}</span>
                 <ChevronRight size={14} className="sidebar-chevron" />

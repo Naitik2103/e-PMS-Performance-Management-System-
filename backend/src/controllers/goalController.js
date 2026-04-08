@@ -2,6 +2,7 @@ import { writeAudit } from "../services/auditService.js";
 import { notifyUser } from "../services/notificationService.js";
 import { ROLES } from "../constants/rbac.js";
 import pool from "../config/db.js";
+import { ensureIsROForAppraisal } from "../services/relationshipGuards.js";
 
 const toNumber = (v) => Number(v || 0);
 
@@ -40,6 +41,13 @@ const ensureAppraisal = async (employeeId, cycleId) => {
     [cycleId, employeeId]
   );
   const row = p.rows[0] || {};
+  if (!row.reporting_officer_id) {
+    const err = new Error(
+      "No Reporting Officer is assigned to you for this appraisal cycle. Please contact HR/Admin to set your reporting hierarchy."
+    );
+    err.statusCode = 400;
+    throw err;
+  }
   const inserted = await pool.query(
     `
     INSERT INTO appraisals (employee_id, cycle_id, ro_id, revo_id, ao_id, status)
@@ -524,9 +532,8 @@ const approveGoalsByAppraisalId = async (req, res, next) => {
     if (review.status !== "submitted") {
       return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "submitted", current: review.status });
     }
-    if (review.ro_id !== req.user.userId) {
-      return res.status(403).json({ error: "This appraisal is not assigned to you" });
-    }
+    const ownership = await ensureIsROForAppraisal(appraisalId, req.user.userId);
+    if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
     await pool.query("UPDATE goals SET status = 'approved', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
     await pool.query("UPDATE appraisals SET status = 'ro_approved', goals_approved_at = NOW() WHERE id = $1", [appraisalId]);
     return res.json({ message: "Goals approved" });
@@ -543,9 +550,8 @@ const sendbackGoalsByAppraisalId = async (req, res, next) => {
     if (review.status !== "submitted") {
       return res.status(409).json({ error: "Action not allowed in current appraisal state", required: "submitted", current: review.status });
     }
-    if (review.ro_id !== req.user.userId) {
-      return res.status(403).json({ error: "This appraisal is not assigned to you" });
-    }
+    const ownership = await ensureIsROForAppraisal(appraisalId, req.user.userId);
+    if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
     await pool.query("UPDATE goals SET status = 'returned', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
     await pool.query("UPDATE appraisals SET status = 'draft' WHERE id = $1", [appraisalId]);
     return res.json({ message: "Goals sent back" });

@@ -1,5 +1,5 @@
 import express from "express";
-import { login, logout, me, selectRole } from "../controllers/authController.js";
+import { login, logout, me, selectRole, switchRole } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 import { loginValidation } from "../validation/authValidation.js";
 import { validate } from "../middleware/validate.js";
@@ -12,6 +12,7 @@ router.post("/forgot-password", (req, res) => {
 });
 router.get("/me", protect, me);
 router.post("/select-role", protect, selectRole);
+router.post("/switch-role", protect, switchRole);
 router.post("/logout", protect, logout);
 
 export default router;

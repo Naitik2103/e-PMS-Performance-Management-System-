@@ -30,6 +30,7 @@ const authenticate = async (req, res, next) => {
     }
 
     const userId = decoded.userId || decoded.id;
+    req.authClaims = decoded;
     const { rows } = await pool.query(
       "SELECT user_id, email, role, is_active FROM users WHERE user_id = $1 LIMIT 1",
       [userId]
@@ -39,11 +40,16 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: "Invalid token" });
     }
 
+    const selectedRole = normalizeRole(decoded.selectedRole || decoded.role || user.role);
+
     req.user = {
       userId: user.user_id,
       id: user.user_id,
-      role: normalizeRole(decoded.role || user.role),
-      email: decoded.email || user.email
+      selectedRole,
+      // keep `role` for backward compatibility across controllers/middleware
+      role: selectedRole,
+      email: decoded.email || user.email,
+      availableRoles: Array.isArray(decoded.availableRoles) ? decoded.availableRoles.map(normalizeRole) : undefined
     };
     return next();
   } catch (error) {

@@ -62,7 +62,7 @@ const Goals = () => {
       setForm({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
       loadGoals();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to save goal");
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to save goal");
     }
   };
 
@@ -72,7 +72,7 @@ const Goals = () => {
       await apiClient.post("/goals/submit", { year });
       loadGoals();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to submit goals");
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to submit goals");
     }
   };
 
@@ -91,7 +91,7 @@ const Goals = () => {
       await apiClient.post(`/goals/${goalId}/approve/${type}`, { decision });
       loadGoals();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to process goal action");
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to process goal action");
     }
   };
 

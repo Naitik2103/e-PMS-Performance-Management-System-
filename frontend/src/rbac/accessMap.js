@@ -24,6 +24,7 @@ export const roleHomePath = (role) => (role === ROLES.HR_ADMIN ? "/admin-dashboa
 export const appRoutes = Object.freeze([
   { path: "/", public: true },
   { path: "/login", public: true },
+  { path: "/select-role", public: true },
   { path: "/unauthorized", public: true },
 
   { path: "/dashboard", layout: true, roles: ALL_AUTHED },
