@@ -6,6 +6,34 @@ import { writeAudit } from "../services/auditService.js";
 const buildFullName = (firstName, lastName) =>
   [String(firstName || "").trim(), String(lastName || "").trim()].filter(Boolean).join(" ").trim();
 
+const ensureParticipantsForCycle = async (cycleId, client = pool) => {
+  // Insert one participant row per active non-admin user only if missing.
+  await client.query(
+    `
+    INSERT INTO appraisal_cycle_participants (
+      id, cycle_id, employee_id, reporting_officer_id, reviewing_officer_id, accepting_officer_id, is_eligible, created_at, updated_at
+    )
+    SELECT
+      gen_random_uuid(),
+      $1,
+      u.user_id,
+      NULL,
+      NULL,
+      NULL,
+      true,
+      NOW(),
+      NOW()
+    FROM users u
+    LEFT JOIN appraisal_cycle_participants acp
+      ON acp.cycle_id = $1 AND acp.employee_id = u.user_id
+    WHERE u.is_active = true
+      AND u.role <> $2
+      AND acp.id IS NULL
+    `,
+    [cycleId, ROLES.HR_ADMIN]
+  );
+};
+
 const getAllUsersForDropdowns = async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -16,7 +44,7 @@ const getAllUsersForDropdowns = async (req, res, next) => {
         u.employee_id AS "employeeId",
         u.role,
         u.is_active AS "isActive",
-        u.ro_id AS "reportingTo",
+        u.reporting_to AS "reportingTo",
         d.name AS department,
         COALESCE(des.title, '') AS designation
       FROM users u
@@ -84,10 +112,10 @@ const createHrUser = async (req, res, next) => {
     const normalizedRole = normalizeRole(role);
 
     const phoneVal = phone ? String(phone).trim() : null;
-    const roId = reportingTo || null;
+    const reportingToId = reportingTo || null;
 
     const returning = `
-      RETURNING user_id, first_name, last_name, full_name, employee_id, email, phone, role, department_id, designation_id, ro_id, is_active, created_at
+      RETURNING user_id, first_name, last_name, full_name, employee_id, email, phone, role, department_id, designation_id, reporting_to, ro_id, is_active, created_at
     `;
 
     const insertWithoutEmployeeId = () =>
@@ -95,13 +123,13 @@ const createHrUser = async (req, res, next) => {
         `
         INSERT INTO users (
           first_name, last_name, full_name, employee_id, email, phone,
-          department_id, designation_id, role, ro_id, rew_id, ao_id,
+          department_id, designation_id, role, reporting_to, ro_id, rew_id, ao_id,
           password_hash, is_active, created_at, updated_at
         )
-        VALUES ($1, $2, $3, NULL, $4, $5, $6, NULL, $7, $8, NULL, NULL, $9, true, NOW(), NOW())
+        VALUES ($1, $2, $3, NULL, $4, $5, $6, NULL, $7, $8, NULL, NULL, NULL, $9, true, NOW(), NOW())
         ${returning}
         `,
-        [firstName, lastName, fullName, emailValue, phoneVal, departmentId, normalizedRole, roId, hashedPassword]
+        [firstName, lastName, fullName, emailValue, phoneVal, departmentId, normalizedRole, reportingToId, hashedPassword]
       );
 
     const insertWithEmployeeId = (empId) =>
@@ -109,13 +137,13 @@ const createHrUser = async (req, res, next) => {
         `
         INSERT INTO users (
           first_name, last_name, full_name, employee_id, email, phone,
-          department_id, designation_id, role, ro_id, rew_id, ao_id,
+          department_id, designation_id, role, reporting_to, ro_id, rew_id, ao_id,
           password_hash, is_active, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, NULL, NULL, $10, true, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, NULL, NULL, NULL, $10, true, NOW(), NOW())
         ${returning}
         `,
-        [firstName, lastName, fullName, empId, emailValue, phoneVal, departmentId, normalizedRole, roId, hashedPassword]
+        [firstName, lastName, fullName, empId, emailValue, phoneVal, departmentId, normalizedRole, reportingToId, hashedPassword]
       );
 
     let inserted;
@@ -152,7 +180,7 @@ const createHrUser = async (req, res, next) => {
       department: dept.rows[0]?.name || null,
       designation: null,
       role: row.role,
-      reportingTo: row.ro_id,
+      reportingTo: row.reporting_to,
       isActive: row.is_active,
       createdAt: row.created_at
     });
@@ -251,58 +279,59 @@ const createCycleWithParticipants = async (req, res, next) => {
 
     const createdBy = req.user?.userId || req.user?.id || null;
 
-    const inserted = await pool.query(
-      `
-      INSERT INTO appraisal_cycles (
-        cycle_name,
-        cycle_year,
-        financial_year,
-        goal_setting_start,
-        goal_setting_end,
-        six_month_progress_review_start,
-        six_month_progress_review_end,
-        annual_appraisal_start,
-        annual_appraisal_end,
-        created_by,
-        created_at,
-        closed_at,
-        status
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NULL, 'draft')
-      RETURNING *
-      `,
-      [
-        String(cycleName).trim(),
-        fy,
-        fy,
-        goalSettingStart || null,
-        goalSettingEnd || null,
-        sixMonthReviewStart || null,
-        sixMonthReviewEnd || null,
-        annualAppraisalStart || null,
-        annualAppraisalEnd || null,
-        createdBy
-      ]
-    );
+    const client = await pool.connect();
+    let newCycle;
+    try {
+      await client.query("BEGIN");
+      const inserted = await client.query(
+        `
+        INSERT INTO appraisal_cycles (
+          cycle_name,
+          cycle_year,
+          financial_year,
+          goal_setting_start,
+          goal_setting_end,
+          six_month_progress_review_start,
+          six_month_progress_review_end,
+          annual_appraisal_start,
+          annual_appraisal_end,
+          created_by,
+          created_at,
+          closed_at,
+          status
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NULL, 'draft')
+        RETURNING *
+        `,
+        [
+          String(cycleName).trim(),
+          fy,
+          fy,
+          goalSettingStart || null,
+          goalSettingEnd || null,
+          sixMonthReviewStart || null,
+          sixMonthReviewEnd || null,
+          annualAppraisalStart || null,
+          annualAppraisalEnd || null,
+          createdBy
+        ]
+      );
+      newCycle = inserted.rows[0];
 
-    const newCycle = inserted.rows[0];
+      await ensureParticipantsForCycle(newCycle.cycle_id, client);
+
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    } finally {
+      client.release();
+    }
 
     const { rows: activeEmployees } = await pool.query(
       `SELECT user_id FROM users WHERE is_active = true AND role <> $1`,
       [ROLES.HR_ADMIN]
     );
-
-    for (const emp of activeEmployees) {
-      await pool.query(
-        `
-        INSERT INTO appraisal_cycle_participants (
-          id, cycle_id, employee_id, reporting_officer_id, reviewing_officer_id, accepting_officer_id, is_eligible, created_at, updated_at
-        )
-        VALUES (gen_random_uuid(), $1, $2, NULL, NULL, NULL, true, NOW(), NOW())
-        `,
-        [newCycle.cycle_id, emp.user_id]
-      );
-    }
 
     await writeAudit({
       user: req.user,
@@ -322,6 +351,10 @@ const createCycleWithParticipants = async (req, res, next) => {
 const getCycleParticipants = async (req, res, next) => {
   try {
     const cycleId = req.params.cycleId || req.params.id;
+
+    // Auto-heal legacy/partially-created cycles with missing participant rows.
+    await ensureParticipantsForCycle(cycleId);
+
     const { rows: participants } = await pool.query(
       `
       SELECT
@@ -359,6 +392,29 @@ const getCycleParticipants = async (req, res, next) => {
             ? "partial"
             : "empty"
     }));
+
+    if (req.query.includeCycle === "1") {
+      const { rows: cycleRows } = await pool.query(
+        `
+        SELECT
+          cycle_id AS id,
+          cycle_name AS "cycleName",
+          financial_year AS "financialYear",
+          goal_setting_start AS "goalSettingStart",
+          goal_setting_end AS "goalSettingEnd",
+          six_month_progress_review_start AS "sixMonthReviewStart",
+          six_month_progress_review_end AS "sixMonthReviewEnd",
+          annual_appraisal_start AS "annualAppraisalStart",
+          annual_appraisal_end AS "annualAppraisalEnd",
+          status
+        FROM appraisal_cycles
+        WHERE cycle_id = $1
+        LIMIT 1
+        `,
+        [cycleId]
+      );
+      return res.json({ cycle: cycleRows[0] || null, participants: result });
+    }
 
     return res.json(result);
   } catch (error) {

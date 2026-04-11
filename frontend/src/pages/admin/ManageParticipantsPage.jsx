@@ -31,14 +31,17 @@ const ManageParticipantsPage = () => {
   const [serverErrors, setServerErrors] = useState([]);
   const [confirmActivate, setConfirmActivate] = useState(false);
 
-  const { data: participants = [] } = useQuery({
+  const { data: participantsResponse } = useQuery({
     queryKey: ["participants", cycleId],
     queryFn: async () => {
-      const res = await apiClient.get(`/admin/cycles/${cycleId}/participants`);
+      const res = await apiClient.get(`/admin/cycles/${cycleId}/participants?includeCycle=1`);
       return res.data;
     },
     enabled: Boolean(cycleId)
   });
+
+  const participants = participantsResponse?.participants || [];
+  const cycle = participantsResponse?.cycle || null;
 
   const { data: allUsers = [] } = useQuery({
     queryKey: ["allUsers"],
@@ -47,16 +50,6 @@ const ManageParticipantsPage = () => {
       return res.data;
     }
   });
-
-  const { data: cycles = [] } = useQuery({
-    queryKey: ["admin", "cycles"],
-    queryFn: async () => {
-      const res = await apiClient.get("/admin/cycles");
-      return res.data;
-    }
-  });
-
-  const cycle = cycles.find((c) => c.id === cycleId);
 
   useEffect(() => {
     if (participants) setLocalParticipants(participants);
@@ -166,7 +159,6 @@ const ManageParticipantsPage = () => {
       setIsDirty(false);
       setServerErrors([]);
       queryClient.invalidateQueries({ queryKey: ["participants", cycleId] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "cycles"] });
     },
     onError: (err) => {
       const d = err.response?.data;
@@ -183,7 +175,7 @@ const ManageParticipantsPage = () => {
     onSuccess: () => {
       showToast("Cycle activated successfully");
       setConfirmActivate(false);
-      queryClient.invalidateQueries({ queryKey: ["admin", "cycles"] });
+      queryClient.invalidateQueries({ queryKey: ["participants", cycleId] });
     },
     onError: (err) => {
       const d = err.response?.data;

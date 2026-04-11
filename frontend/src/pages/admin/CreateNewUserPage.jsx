@@ -6,10 +6,7 @@ import { useToast } from "../../hooks/useToast";
 
 const ROLE_OPTIONS = [
   { value: "employee", label: "Employee" },
-  { value: "reporting_officer", label: "Reporting Officer" },
-  { value: "reviewing_officer", label: "Reviewing Officer" },
-  { value: "accepting_officer", label: "Accepting Officer" },
-  { value: "hr_admin", label: "HR Admin" }
+  { value: "hr_admin", label: "Admin" }
 ];
 
 const initials = (name) =>

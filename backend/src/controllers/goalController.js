@@ -11,17 +11,26 @@ const getActiveOrByYearCycle = async (cycleId, year) => {
     const r = await pool.query("SELECT * FROM appraisal_cycles WHERE cycle_id = $1 LIMIT 1", [cycleId]);
     return r.rows[0] || null;
   }
+  const active = await pool.query(
+    "SELECT * FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
+  );
+  if (active.rows[0]) {
+    return active.rows[0];
+  }
   if (year) {
     const r = await pool.query(
-      "SELECT * FROM appraisal_cycles WHERE cycle_year = $1 ORDER BY created_at DESC LIMIT 1",
+      `
+      SELECT *
+      FROM appraisal_cycles
+      WHERE cycle_year::text = $1 OR financial_year = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
       [String(year)]
     );
     return r.rows[0] || null;
   }
-  const r = await pool.query(
-    "SELECT * FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
-  );
-  return r.rows[0] || null;
+  return null;
 };
 
 const ensureAppraisal = async (employeeId, cycleId) => {

@@ -18,8 +18,12 @@ const ensureAdminSchema = async (pool) => {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id text`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS designation_id uuid REFERENCES designations(id)`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reporting_to uuid REFERENCES users(user_id)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT NOW()`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT NOW()`);
+
+  // Backfill org-chart manager from legacy ro_id when available.
+  await pool.query(`UPDATE users SET reporting_to = ro_id WHERE reporting_to IS NULL AND ro_id IS NOT NULL`);
 
   await pool.query(
     `CREATE UNIQUE INDEX IF NOT EXISTS users_employee_id_unique ON users(employee_id) WHERE employee_id IS NOT NULL AND employee_id <> ''`
@@ -86,6 +90,13 @@ const ensureAdminSchema = async (pool) => {
     );
     await pool.query(
       `CREATE UNIQUE INDEX IF NOT EXISTS appraisal_cycle_participants_id_uq ON appraisal_cycle_participants(id)`
+    );
+    // Keep officer assignments nullable: they are intentionally filled later from Manage Participants.
+    await pool.query(`ALTER TABLE appraisal_cycle_participants ALTER COLUMN reporting_officer_id DROP NOT NULL`);
+    await pool.query(`ALTER TABLE appraisal_cycle_participants ALTER COLUMN reviewing_officer_id DROP NOT NULL`);
+    await pool.query(`ALTER TABLE appraisal_cycle_participants ALTER COLUMN accepting_officer_id DROP NOT NULL`);
+    await pool.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS appraisal_cycle_participants_cycle_employee_uq ON appraisal_cycle_participants(cycle_id, employee_id)`
     );
   }
 
