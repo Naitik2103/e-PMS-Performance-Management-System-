@@ -9,14 +9,17 @@ import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
 import Tracking from "./pages/Tracking";
 import Reviews from "./pages/Reviews";
-import Admin from "./pages/Admin";
 import CreateNewUserPage from "./pages/admin/CreateNewUserPage";
-import AppraisalCycleManagementPage from "./pages/admin/AppraisalCycleManagementPage";
+import AdminCyclesPage from "./pages/admin/AdminCyclesPage";
+import ManageParticipantsPage from "./pages/admin/ManageParticipantsPage";
+import AdminUsersHubPage from "./pages/admin/AdminUsersHubPage";
+import AdminPlaceholderPage from "./pages/admin/AdminPlaceholderPage";
 import AllUsersPage from "./pages/admin/AllUsersPage";
 import ReportingHierarchyPage from "./pages/admin/ReportingHierarchyPage";
 import Unauthorized from "./pages/Unauthorized";
 import { appRoutes } from "./rbac/accessMap";
 import { useAuth } from "./context/AuthContext";
+import { ROLES } from "./constants/rbac";
 
 const App = () => {
   const { preAuth } = useAuth();
@@ -32,16 +35,25 @@ const App = () => {
     "/tracking": <Tracking />,
     "/reviews": <Reviews />,
 
-    "/admin-dashboard": <Admin />,
-    "/admin/create-user": <CreateNewUserPage />,
-    "/admin/cycles": <AppraisalCycleManagementPage />,
+    "/admin-dashboard": <Navigate to="/admin/cycles" replace />,
+    "/admin/cycles": <AdminCyclesPage />,
+    "/admin/users": <AdminUsersHubPage />,
+    "/admin/users/create": <CreateNewUserPage />,
+    "/admin/departments": (
+      <AdminPlaceholderPage title="Departments & Designations" description="Manage department and designation master data." />
+    ),
+    "/admin/analytics": <AdminPlaceholderPage title="Analytics" description="Workforce and appraisal analytics will appear here." />,
+    "/admin/audit": <AdminPlaceholderPage title="Audit log" description="View administrative actions across the system." />,
     "/admin/all-users": <AllUsersPage />,
     "/admin/hierarchy": <ReportingHierarchyPage />,
+    "/admin/create-user": <Navigate to="/admin/users/create" replace />
   };
+
+  const staticRoutes = appRoutes.filter((r) => !String(r.path).includes(":"));
 
   return (
     <Routes>
-      {appRoutes.map((r) => {
+      {staticRoutes.map((r) => {
         const element = pageMap[r.path];
         if (r.public) return <Route key={r.path} path={r.path} element={element} />;
         return (
@@ -57,13 +69,24 @@ const App = () => {
         );
       })}
 
-      {/* Legacy aliases */}
-      <Route path="/admin" element={<Navigate to="/admin-dashboard" replace />} />
+      <Route
+        path="/admin/cycles/:cycleId/participants"
+        element={
+          <ProtectedRoute allowedRoles={[ROLES.HR_ADMIN]}>
+            <Layout>
+              <ManageParticipantsPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="/admin" element={<Navigate to="/admin/cycles" replace />} />
+
       <Route path="/dashboard/employee" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard/ro" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard/revo" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard/ao" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard/admin" element={<Navigate to="/admin-dashboard" replace />} />
+      <Route path="/dashboard/admin" element={<Navigate to="/admin/cycles" replace />} />
       <Route path="/reporting-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/reviewing-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/accepting-dashboard" element={<Navigate to="/dashboard" replace />} />

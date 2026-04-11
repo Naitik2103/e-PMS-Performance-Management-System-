@@ -41,44 +41,38 @@ const generatePreAuthToken = ({ user, tokenId, availableRoles }) =>
   );
 
 const getActiveCycleId = async () => {
-  const r = await pool.query("SELECT cycle_id FROM appraisal_cycles WHERE closed_at IS NULL ORDER BY created_at DESC LIMIT 1");
+  const r = await pool.query(
+    "SELECT cycle_id FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
+  );
   return r.rows[0]?.cycle_id || null;
 };
 
 const getAvailableRolesForActiveCycle = async (userId, primaryRole) => {
-  const roles = new Set([ROLES.EMPLOYEE]);
   const normalizedPrimary = normalizeRole(primaryRole);
   if (normalizedPrimary === ROLES.HR_ADMIN) return [ROLES.HR_ADMIN];
 
-  const cycleId = await getActiveCycleId();
-  if (!cycleId) {
-    // No active cycle: still allow employee context so user can log in, but no officer contexts.
-    return Array.from(roles);
-  }
+  // Context availability is derived from direct assignments in users table:
+  // - RO context when any user has ro_id = current user
+  // - RevO context when any user has rew_id = current user
+  // - AO context when any user has ao_id = current user
+  // Employee context is always available.
+  const available = new Set([ROLES.EMPLOYEE]);
+  const assignments = await pool.query(
+    `
+    SELECT
+      EXISTS (SELECT 1 FROM users WHERE is_active = true AND ro_id = $1) AS has_ro_assignees,
+      EXISTS (SELECT 1 FROM users WHERE is_active = true AND rew_id = $1) AS has_revo_assignees,
+      EXISTS (SELECT 1 FROM users WHERE is_active = true AND ao_id = $1) AS has_ao_assignees
+    `,
+    [userId]
+  );
 
-  const [ro, revo, ao] = await Promise.all([
-    pool.query(
-      "SELECT 1 FROM appraisal_cycle_participants WHERE cycle_id = $1 AND reporting_officer_id = $2 LIMIT 1",
-      [cycleId, userId]
-    ),
-    pool.query(
-      "SELECT 1 FROM appraisal_cycle_participants WHERE cycle_id = $1 AND reviewing_officer_id = $2 LIMIT 1",
-      [cycleId, userId]
-    ),
-    pool.query(
-      "SELECT 1 FROM appraisal_cycle_participants WHERE cycle_id = $1 AND accepting_officer_id = $2 LIMIT 1",
-      [cycleId, userId]
-    )
-  ]);
+  const row = assignments.rows[0] || {};
+  if (row.has_ro_assignees) available.add(ROLES.REPORTING_OFFICER);
+  if (row.has_revo_assignees) available.add(ROLES.REVIEWING_OFFICER);
+  if (row.has_ao_assignees) available.add(ROLES.ACCEPTING_OFFICER);
 
-  if (ro.rows.length) roles.add(ROLES.REPORTING_OFFICER);
-  if (revo.rows.length) roles.add(ROLES.REVIEWING_OFFICER);
-  if (ao.rows.length) roles.add(ROLES.ACCEPTING_OFFICER);
-
-  // Always include their primary role if it's a known role (legacy DB values normalized).
-  if (Object.values(ROLES).includes(normalizedPrimary)) roles.add(normalizedPrimary);
-
-  return Array.from(roles);
+  return Array.from(available);
 };
 
 const mapUserResponse = ({ user, selectedRole, availableRoles }) => ({

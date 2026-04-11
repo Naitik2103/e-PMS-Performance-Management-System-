@@ -1,37 +1,55 @@
 import express from "express";
-import { protect } from "../middleware/auth.js";
-import { authorise } from "../middleware/authorise.js";
-import { ROLES } from "../constants/rbac.js";
-import { listCycles, createCycle, updateCycle } from "../controllers/adminController.js";
+import { authenticateJWT, authorizeContext } from "../middleware/adminApiAuth.js";
 import { createUser, listUsers, updateUser } from "../controllers/userController.js";
+import {
+  getAllUsersForDropdowns,
+  getDepartmentsAndDesignations,
+  createHrUser,
+  listCyclesWithStats,
+  createCycleWithParticipants,
+  getCycleParticipants,
+  bulkSaveParticipants,
+  activateCycle
+} from "../controllers/adminHrController.js";
 import pool from "../config/db.js";
 
 const router = express.Router();
-router.use(protect, authorise([ROLES.HR_ADMIN]));
+router.use(authenticateJWT, authorizeContext("hr_admin"));
 
+router.get("/users/all", getAllUsersForDropdowns);
+router.get("/meta/departments-designations", getDepartmentsAndDesignations);
+router.post("/users", createHrUser);
 router.get("/users", listUsers);
-router.post("/users", createUser);
 router.put("/users/:id", updateUser);
 router.put("/users/:id/deactivate", async (req, res, next) => {
   try {
-    await pool.query("UPDATE users SET is_active = false WHERE user_id = $1", [req.params.id]);
+    await pool.query("UPDATE users SET is_active = false, updated_at = NOW() WHERE user_id = $1", [req.params.id]);
     return res.json({ id: req.params.id, isActive: false });
   } catch (error) {
     return next(error);
   }
 });
 
-router.get("/cycles", listCycles);
-router.post("/cycles", createCycle);
-router.put("/cycles/:id/activate", async (req, res, next) => {
-  req.body.isActive = true;
-  req.body.status = "active";
-  return updateCycle(req, res, next);
-});
+router.get("/cycles", listCyclesWithStats);
+router.post("/cycles", createCycleWithParticipants);
+router.get("/cycles/:cycleId/participants", getCycleParticipants);
+router.put("/cycles/:cycleId/participants", bulkSaveParticipants);
+router.put("/cycles/:cycleId/activate", activateCycle);
+
 router.put("/cycles/:id/close", async (req, res, next) => {
-  req.body.isActive = false;
-  req.body.status = "closed";
-  return updateCycle(req, res, next);
+  try {
+    const r = await pool.query(
+      `UPDATE appraisal_cycles SET closed_at = NOW(), status = 'closed', updated_at = NOW() WHERE cycle_id = $1 RETURNING cycle_id`,
+      [req.params.id]
+    );
+    if (!r.rows.length) {
+      res.status(404);
+      return next(new Error("Cycle not found"));
+    }
+    return res.json({ message: "Cycle closed", id: r.rows[0].cycle_id });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.get("/appraisals", async (req, res, next) => {

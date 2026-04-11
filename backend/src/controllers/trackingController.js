@@ -149,7 +149,7 @@ const listTeamTracking = async (req, res, next) => {
   try {
     // Team is determined by appraisal_cycle_participants for active cycle
     const activeCycle = await pool.query(
-      "SELECT cycle_id FROM appraisal_cycles ORDER BY created_at DESC LIMIT 1"
+      "SELECT cycle_id FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
     );
     const cycleId = activeCycle.rows[0]?.cycle_id || null;
 

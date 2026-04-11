@@ -8,7 +8,7 @@ const roleHomeMap = {
   [ROLES.REPORTING_OFFICER]: "/reporting-dashboard",
   [ROLES.REVIEWING_OFFICER]: "/reviewing-dashboard",
   [ROLES.ACCEPTING_OFFICER]: "/accepting-dashboard",
-  [ROLES.HR_ADMIN]: "/admin-dashboard",
+  [ROLES.HR_ADMIN]: "/admin/cycles",
 };
 
 const features = [

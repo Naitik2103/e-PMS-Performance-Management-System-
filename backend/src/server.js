@@ -1,11 +1,13 @@
 
 import app from "./app.js";
 import pool from "./config/db.js";
+import { ensureAdminSchema } from "./db/ensureAdminSchema.js";
 
 const PORT = process.env.PORT || 5000;
 
 (async () => {
   try {
+    await ensureAdminSchema(pool);
     // Bootstrap minimal schema for no-ORM mode (Neon/pg direct)
     // Your Neon DB already contains a `users` table (PK is `user_id`), so we only create
     // the session table if it's missing.

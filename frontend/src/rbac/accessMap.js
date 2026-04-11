@@ -4,9 +4,10 @@ import {
   BarChart2,
   ClipboardList,
   Users,
-  UserPlus,
   CalendarDays,
   Network,
+  Building2,
+  FileText,
 } from "lucide-react";
 
 import { ROLES } from "../constants/rbac";
@@ -19,7 +20,16 @@ const ALL_AUTHED = Object.freeze([
   ROLES.HR_ADMIN,
 ]);
 
-export const roleHomePath = (role) => (role === ROLES.HR_ADMIN ? "/admin-dashboard" : "/dashboard");
+export const roleHomePath = (role) => (role === ROLES.HR_ADMIN ? "/admin/cycles" : "/dashboard");
+
+/** Static admin sidebar (HR admin only). */
+export const adminNavItems = Object.freeze([
+  { label: "Appraisal cycles", path: "/admin/cycles", key: "ac", icon: CalendarDays },
+  { label: "User management", path: "/admin/users", key: "um", icon: Users },
+  { label: "Departments & Designations", path: "/admin/departments", key: "dd", icon: Building2 },
+  { label: "Analytics", path: "/admin/analytics", key: "an", icon: BarChart2 },
+  { label: "Audit log", path: "/admin/audit", key: "al", icon: FileText },
+]);
 
 export const appRoutes = Object.freeze([
   { path: "/", public: true },
@@ -33,10 +43,16 @@ export const appRoutes = Object.freeze([
   { path: "/reviews", layout: true, roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER] },
 
   { path: "/admin-dashboard", layout: true, roles: [ROLES.HR_ADMIN] },
-  { path: "/admin/create-user", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/cycles", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/cycles/:cycleId/participants", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/users", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/users/create", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/departments", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/analytics", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/audit", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/all-users", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/hierarchy", layout: true, roles: [ROLES.HR_ADMIN] },
+  { path: "/admin/create-user", layout: true, roles: [ROLES.HR_ADMIN] },
 ]);
 
 export const sidebarItems = Object.freeze([
@@ -70,23 +86,9 @@ export const sidebarItems = Object.freeze([
   },
   {
     key: "admin",
-    to: "/admin-dashboard",
-    icon: Users,
-    label: "Admin Panel",
-    roles: [ROLES.HR_ADMIN],
-  },
-  {
-    key: "admin-create-user",
-    to: "/admin/create-user",
-    icon: UserPlus,
-    label: "Create New User",
-    roles: [ROLES.HR_ADMIN],
-  },
-  {
-    key: "admin-cycles",
     to: "/admin/cycles",
-    icon: CalendarDays,
-    label: "Appraisal Cycle Management",
+    icon: Users,
+    label: "Administration",
     roles: [ROLES.HR_ADMIN],
   },
   {

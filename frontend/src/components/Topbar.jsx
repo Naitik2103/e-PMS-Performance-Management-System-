@@ -10,9 +10,14 @@ const pageTitles = {
   "/reporting-dashboard": "Dashboard",
   "/reviewing-dashboard": "Dashboard",
   "/accepting-dashboard": "Dashboard",
-  "/admin-dashboard": "Admin Panel",
-  "/admin/create-user": "Create New User",
-  "/admin/cycles": "Appraisal Cycle Management",
+  "/admin-dashboard": "Administration",
+  "/admin/cycles": "Appraisal cycles",
+  "/admin/users": "User management",
+  "/admin/users/create": "Create user",
+  "/admin/departments": "Departments & Designations",
+  "/admin/analytics": "Analytics",
+  "/admin/audit": "Audit log",
+  "/admin/create-user": "Create user",
   "/admin/all-users": "All Users",
   "/admin/hierarchy": "Reporting Hierarchy",
   "/goals": "Annual Goal Setting",
@@ -32,7 +37,10 @@ const Topbar = () => {
   const notifRef = React.useRef(null);
   const profileRef = React.useRef(null);
   const roleRef = React.useRef(null);
-  const title = pageTitles[location.pathname] || "e-PMS";
+  const title =
+    pageTitles[location.pathname] ||
+    (location.pathname.match(/^\/admin\/cycles\/[^/]+\/participants$/) ? "Manage participants" : null) ||
+    "e-PMS";
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   const loadUnreadCount = React.useCallback(() => {

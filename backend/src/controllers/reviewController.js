@@ -86,7 +86,9 @@ const getActiveOrByYearCycle = async (cycleId, year) => {
     );
     return r.rows[0] || null;
   }
-  const r = await pool.query("SELECT * FROM appraisal_cycles WHERE closed_at IS NULL ORDER BY created_at DESC LIMIT 1");
+  const r = await pool.query(
+    "SELECT * FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
+  );
   return r.rows[0] || null;
 };
 
