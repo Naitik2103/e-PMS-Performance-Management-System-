@@ -108,22 +108,160 @@ const ManageParticipantsPage = () => {
       .filter((p) => statusFilter === "all" || p.assignmentStatus === statusFilter);
   }, [localParticipants, search, statusFilter]);
 
-  const officerOptionsForRow = (employeeId) =>
-    allUsers
-      .filter((u) => u.id !== employeeId)
-      .map((u) => ({
-        value: u.id,
-        label: `${u.fullName} — ${u.department || ""}`
-      }));
+  const buildOption = (u) => ({
+    value: u.id,
+    label: `${u.fullName} — ${u.department || ""}`
+  });
+
+  const childrenByOfficer = useMemo(() => {
+    const map = new Map();
+    const addEdge = (officerId, employeeId) => {
+      if (!officerId || !employeeId) return;
+      const oid = String(officerId);
+      const eid = String(employeeId);
+      if (!map.has(oid)) map.set(oid, new Set());
+      map.get(oid).add(eid);
+    };
+
+    // Immediate, cycle-local links from current table selections.
+    for (const row of localParticipants) {
+      addEdge(row.reportingOfficerId, row.employeeId);
+      addEdge(row.reviewingOfficerId, row.employeeId);
+    }
+
+    // Fallback/master links from user metadata.
+    for (const u of allUsers) {
+      addEdge(u.reportingTo, u.id);
+      addEdge(u.roId, u.id);
+      addEdge(u.rewId, u.id);
+    }
+
+    return map;
+  }, [localParticipants, allUsers]);
+
+  const descendantsProvider = useMemo(() => {
+    const cache = new Map();
+    const dfs = (rootId) => {
+      const rid = String(rootId);
+      if (cache.has(rid)) return cache.get(rid);
+
+      const visited = new Set();
+      const stack = [...(childrenByOfficer.get(rid) || [])];
+      while (stack.length > 0) {
+        const curr = String(stack.pop());
+        if (visited.has(curr) || curr === rid) continue;
+        visited.add(curr);
+        const next = childrenByOfficer.get(curr);
+        if (next) {
+          for (const child of next) {
+            if (!visited.has(String(child))) stack.push(String(child));
+          }
+        }
+      }
+
+      cache.set(rid, visited);
+      return visited;
+    };
+
+    return {
+      descendantsOf: (officerId) => {
+        if (!officerId) return new Set();
+        return dfs(String(officerId));
+      }
+    };
+  }, [childrenByOfficer]);
+
+  const isInOfficerSubgraph = (candidateId, officerId) => {
+    if (!candidateId || !officerId) return false;
+    const cid = String(candidateId);
+    const oid = String(officerId);
+    if (cid === oid) return true;
+    return descendantsProvider.descendantsOf(oid).has(cid);
+  };
+
+  const isAllowedOfficerForField = (row, field, candidateId) => {
+    const cid = String(candidateId || "");
+    const employeeId = String(row.employeeId || "");
+    const selectedRO = row.reportingOfficerId ? String(row.reportingOfficerId) : null;
+    const selectedRevO = row.reviewingOfficerId ? String(row.reviewingOfficerId) : null;
+
+    if (!cid || cid === employeeId) return false;
+    if (!allUsers.some((u) => String(u.id) === cid)) return false;
+
+    if (field === "reviewingOfficerId") {
+      if (selectedRO && isInOfficerSubgraph(cid, selectedRO)) {
+        return false;
+      }
+      return true;
+    }
+
+    if (field === "acceptingOfficerId") {
+      if (selectedRO && isInOfficerSubgraph(cid, selectedRO)) {
+        return false;
+      }
+      if (selectedRevO && isInOfficerSubgraph(cid, selectedRevO)) {
+        return false;
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  const officerOptionsForRow = (row, field) => {
+    const employeeId = row.employeeId;
+
+    // Base list: never allow selecting the same employee as their own officer.
+    let candidates = allUsers.filter((u) => u.id !== employeeId);
+
+    if (field === "reviewingOfficerId") {
+      candidates = candidates.filter((u) => isAllowedOfficerForField(row, "reviewingOfficerId", u.id));
+      return candidates.map(buildOption);
+    }
+
+    if (field === "acceptingOfficerId") {
+      candidates = candidates.filter((u) => isAllowedOfficerForField(row, "acceptingOfficerId", u.id));
+      return candidates.map(buildOption);
+    }
+
+    // Reporting officer dropdown.
+    return candidates.map(buildOption);
+  };
 
   const handleOfficerChange = (participantId, field, value) => {
     setLocalParticipants((prev) =>
       prev.map((p) => {
         if (p.participantId !== participantId) return p;
         const next = { ...p, [field]: value || null };
+
+        // Keep dependent selections valid when RO/RevO changes.
+        if (field === "reportingOfficerId") {
+          if (
+            next.reviewingOfficerId &&
+            !isAllowedOfficerForField(next, "reviewingOfficerId", next.reviewingOfficerId)
+          ) {
+            next.reviewingOfficerId = null;
+          }
+          if (
+            next.acceptingOfficerId &&
+            !isAllowedOfficerForField(next, "acceptingOfficerId", next.acceptingOfficerId)
+          ) {
+            next.acceptingOfficerId = null;
+          }
+        }
+
+        if (field === "reviewingOfficerId") {
+          if (
+            next.acceptingOfficerId &&
+            !isAllowedOfficerForField(next, "acceptingOfficerId", next.acceptingOfficerId)
+          ) {
+            next.acceptingOfficerId = null;
+          }
+        }
+
         const ro = field === "reportingOfficerId" ? value || null : p.reportingOfficerId;
-        const revo = field === "reviewingOfficerId" ? value || null : p.reviewingOfficerId;
-        const ao = field === "acceptingOfficerId" ? value || null : p.acceptingOfficerId;
+        const revo = field === "reviewingOfficerId" ? value || null : next.reviewingOfficerId;
+        const ao = field === "acceptingOfficerId" ? value || null : next.acceptingOfficerId;
         next.assignmentStatus =
           ro && revo && ao ? "complete" : ro || revo || ao ? "partial" : "empty";
         return next;
@@ -311,46 +449,55 @@ const ManageParticipantsPage = () => {
                   </div>
                 </td>
                 <td>
+                  {(() => {
+                    const roOptions = officerOptionsForRow(p, "reportingOfficerId");
+                    return (
                   <Select
                     styles={selectStyles(Boolean(p.reportingOfficerId))}
                     isClearable
                     placeholder="— Select —"
-                    options={officerOptionsForRow(p.employeeId)}
-                    value={
-                      officerOptionsForRow(p.employeeId).find((o) => o.value === p.reportingOfficerId) || null
-                    }
+                    options={roOptions}
+                    value={roOptions.find((o) => o.value === p.reportingOfficerId) || null}
                     onChange={(opt) =>
                       handleOfficerChange(p.participantId, "reportingOfficerId", opt?.value)
                     }
                   />
+                    );
+                  })()}
                 </td>
                 <td>
+                  {(() => {
+                    const revoOptions = officerOptionsForRow(p, "reviewingOfficerId");
+                    return (
                   <Select
                     styles={selectStyles(Boolean(p.reviewingOfficerId))}
                     isClearable
                     placeholder="— Select —"
-                    options={officerOptionsForRow(p.employeeId)}
-                    value={
-                      officerOptionsForRow(p.employeeId).find((o) => o.value === p.reviewingOfficerId) || null
-                    }
+                    options={revoOptions}
+                    value={revoOptions.find((o) => o.value === p.reviewingOfficerId) || null}
                     onChange={(opt) =>
                       handleOfficerChange(p.participantId, "reviewingOfficerId", opt?.value)
                     }
                   />
+                    );
+                  })()}
                 </td>
                 <td>
+                  {(() => {
+                    const aoOptions = officerOptionsForRow(p, "acceptingOfficerId");
+                    return (
                   <Select
                     styles={selectStyles(Boolean(p.acceptingOfficerId))}
                     isClearable
                     placeholder="— Select —"
-                    options={officerOptionsForRow(p.employeeId)}
-                    value={
-                      officerOptionsForRow(p.employeeId).find((o) => o.value === p.acceptingOfficerId) || null
-                    }
+                    options={aoOptions}
+                    value={aoOptions.find((o) => o.value === p.acceptingOfficerId) || null}
                     onChange={(opt) =>
                       handleOfficerChange(p.participantId, "acceptingOfficerId", opt?.value)
                     }
                   />
+                    );
+                  })()}
                 </td>
                 <td>
                   <span className={`mp-status mp-status--${p.assignmentStatus}`}>{p.assignmentStatus}</span>

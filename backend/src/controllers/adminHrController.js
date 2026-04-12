@@ -45,6 +45,8 @@ const getAllUsersForDropdowns = async (req, res, next) => {
         u.role,
         u.is_active AS "isActive",
         u.reporting_to AS "reportingTo",
+        u.ro_id AS "roId",
+        u.rew_id AS "rewId",
         d.name AS department,
         COALESCE(des.title, '') AS designation
       FROM users u
@@ -444,6 +446,67 @@ const bulkSaveParticipants = async (req, res, next) => {
     }
     if (conflicts.length > 0) {
       return res.status(422).json({ errors: conflicts });
+    }
+
+    const { rows: userRows } = await pool.query(
+      `SELECT user_id, COALESCE(reporting_to, ro_id) AS reporting_to, ro_id, rew_id FROM users`
+    );
+    const userMap = new Map(userRows.map((u) => [String(u.user_id), u]));
+    const isUnderOfficer = (candidateId, officerId) => {
+      if (!candidateId || !officerId) return false;
+      const c = userMap.get(String(candidateId));
+      if (!c) return false;
+      const oid = String(officerId);
+      return [c.reporting_to, c.ro_id, c.rew_id].some((v) => v && String(v) === oid);
+    };
+
+    const hierarchyErrors = [];
+    const participantByEmployeeId = new Map(
+      participants
+        .filter((p) => p?.employeeId)
+        .map((p) => [String(p.employeeId), p])
+    );
+
+    const isUnderOfficerInCurrentCycle = (candidateId, officerId) => {
+      if (!candidateId || !officerId) return false;
+      const candidate = participantByEmployeeId.get(String(candidateId));
+      if (!candidate) return false;
+      const oid = String(officerId);
+      return [candidate.reportingOfficerId, candidate.reviewingOfficerId].some(
+        (v) => v && String(v) === oid
+      );
+    };
+
+    for (const p of participants) {
+      const employeeName = p.employeeName || p.employeeId;
+      const ro = p.reportingOfficerId || null;
+      const revo = p.reviewingOfficerId || null;
+      const ao = p.acceptingOfficerId || null;
+
+      if (
+        ro &&
+        revo &&
+        (String(revo) === String(ro) || isUnderOfficer(revo, ro) || isUnderOfficerInCurrentCycle(revo, ro))
+      ) {
+        hierarchyErrors.push(`${employeeName}: selected Reviewing Officer is in the selected Reporting Officer chain`);
+      }
+      if (
+        ro &&
+        ao &&
+        (String(ao) === String(ro) || isUnderOfficer(ao, ro) || isUnderOfficerInCurrentCycle(ao, ro))
+      ) {
+        hierarchyErrors.push(`${employeeName}: selected Accepting Officer is in the selected Reporting Officer chain`);
+      }
+      if (
+        revo &&
+        ao &&
+        (String(ao) === String(revo) || isUnderOfficer(ao, revo) || isUnderOfficerInCurrentCycle(ao, revo))
+      ) {
+        hierarchyErrors.push(`${employeeName}: selected Accepting Officer is in the selected Reviewing Officer chain`);
+      }
+    }
+    if (hierarchyErrors.length > 0) {
+      return res.status(422).json({ errors: hierarchyErrors });
     }
 
     const client = await pool.connect();
