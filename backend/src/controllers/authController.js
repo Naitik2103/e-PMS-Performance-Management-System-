@@ -40,19 +40,38 @@ const generatePreAuthToken = ({ user, tokenId, availableRoles }) =>
     { expiresIn: preAuthTtlSec }
   );
 
+const getActiveCycleId = async () => {
+  const { rows } = await pool.query(
+    "SELECT cycle_id FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
+  );
+  return rows[0]?.cycle_id || null;
+};
+
 const getAvailableRolesForActiveCycle = async (userId, primaryRole) => {
   const normalizedPrimary = normalizeRole(primaryRole);
   if (normalizedPrimary === ROLES.HR_ADMIN) return [ROLES.HR_ADMIN];
 
   const available = new Set([ROLES.EMPLOYEE]);
+  if (normalizedPrimary && normalizedPrimary !== ROLES.EMPLOYEE) {
+    available.add(normalizedPrimary);
+  }
+
+  const activeCycleId = await getActiveCycleId();
+  if (!activeCycleId) {
+    return Array.from(available);
+  }
+
   const assignments = await pool.query(
     `
     SELECT
-      EXISTS (SELECT 1 FROM users WHERE is_active = true AND ro_id = $1) AS has_ro_assignees,
-      EXISTS (SELECT 1 FROM users WHERE is_active = true AND rew_id = $1) AS has_revo_assignees,
-      EXISTS (SELECT 1 FROM users WHERE is_active = true AND ao_id = $1) AS has_ao_assignees
+      COALESCE(bool_or(reporting_officer_id = $1), false) AS has_ro_assignees,
+      COALESCE(bool_or(reviewing_officer_id = $1), false) AS has_revo_assignees,
+      COALESCE(bool_or(accepting_officer_id = $1), false) AS has_ao_assignees
+    FROM appraisal_cycle_participants
+    WHERE cycle_id = $2
+      AND ($1 = reporting_officer_id OR $1 = reviewing_officer_id OR $1 = accepting_officer_id)
     `,
-    [userId]
+    [userId, activeCycleId]
   );
 
   const row = assignments.rows[0] || {};
@@ -329,6 +348,122 @@ const me = async (req, res, next) => {
   }
 };
 
+const myAssignedEmployees = async (req, res, next) => {
+  try {
+    const activeCycleId = await getActiveCycleId();
+    const activeRole = normalizeRole(req.user.selectedRole || req.user.role);
+    if (!activeCycleId) {
+      return res.json({
+        cycleId: null,
+        mode: activeRole,
+        officers: {
+          reportingOfficer: null,
+          reviewingOfficer: null,
+          acceptingOfficer: null
+        },
+        employees: []
+      });
+    }
+
+    if (activeRole === ROLES.EMPLOYEE) {
+      const { rows } = await pool.query(
+        `
+        SELECT
+          p.reporting_officer_id AS "reportingOfficerId",
+          COALESCE(NULLIF(TRIM(ro.full_name), ''), CONCAT_WS(' ', ro.first_name, ro.last_name), ro.email) AS "reportingOfficerName",
+          p.reviewing_officer_id AS "reviewingOfficerId",
+          COALESCE(NULLIF(TRIM(revo.full_name), ''), CONCAT_WS(' ', revo.first_name, revo.last_name), revo.email) AS "reviewingOfficerName",
+          p.accepting_officer_id AS "acceptingOfficerId",
+          COALESCE(NULLIF(TRIM(ao.full_name), ''), CONCAT_WS(' ', ao.first_name, ao.last_name), ao.email) AS "acceptingOfficerName"
+        FROM appraisal_cycle_participants p
+        LEFT JOIN users ro ON ro.user_id = p.reporting_officer_id
+        LEFT JOIN users revo ON revo.user_id = p.reviewing_officer_id
+        LEFT JOIN users ao ON ao.user_id = p.accepting_officer_id
+        WHERE p.cycle_id = $1 AND p.employee_id = $2
+        LIMIT 1
+        `,
+        [activeCycleId, req.user.id]
+      );
+
+      const row = rows[0] || {};
+      return res.json({
+        cycleId: activeCycleId,
+        mode: ROLES.EMPLOYEE,
+        officers: {
+          reportingOfficer: row.reportingOfficerId
+            ? { id: row.reportingOfficerId, name: row.reportingOfficerName }
+            : null,
+          reviewingOfficer: row.reviewingOfficerId
+            ? { id: row.reviewingOfficerId, name: row.reviewingOfficerName }
+            : null,
+          acceptingOfficer: row.acceptingOfficerId
+            ? { id: row.acceptingOfficerId, name: row.acceptingOfficerName }
+            : null
+        },
+        employees: []
+      });
+    }
+
+    const roleColumnMap = {
+      [ROLES.REPORTING_OFFICER]: "reporting_officer_id",
+      [ROLES.REVIEWING_OFFICER]: "reviewing_officer_id",
+      [ROLES.ACCEPTING_OFFICER]: "accepting_officer_id"
+    };
+
+    const column = roleColumnMap[activeRole];
+    if (!column) {
+      return res.json({
+        cycleId: activeCycleId,
+        mode: activeRole,
+        officers: {
+          reportingOfficer: null,
+          reviewingOfficer: null,
+          acceptingOfficer: null
+        },
+        employees: []
+      });
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        p.employee_id AS "employeeId",
+        COALESCE(NULLIF(TRIM(u.full_name), ''), CONCAT_WS(' ', u.first_name, u.last_name), u.email) AS "employeeName",
+        u.employee_id AS "employeeCode",
+        d.name AS department,
+        des.title AS designation
+      FROM appraisal_cycle_participants p
+      JOIN users u ON u.user_id = p.employee_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      LEFT JOIN designations des ON des.id = u.designation_id
+      WHERE p.cycle_id = $2
+        AND p.${column} = $1
+      ORDER BY "employeeName" ASC
+      `,
+      [req.user.id, activeCycleId]
+    );
+
+    return res.json({
+      cycleId: activeCycleId,
+      mode: activeRole,
+      officers: {
+        reportingOfficer: null,
+        reviewingOfficer: null,
+        acceptingOfficer: null
+      },
+      employees: rows.map((row) => ({
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        employeeCode: row.employeeCode,
+        department: row.department,
+        designation: row.designation
+      }))
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const selectRole = async (req, res, next) => {
   try {
     if (req.authClaims?.stage !== "preauth") {
@@ -438,6 +573,7 @@ export {
   login,
   logout,
   me,
+  myAssignedEmployees,
   selectRole,
   switchRole,
   requestPasswordResetOtp,
