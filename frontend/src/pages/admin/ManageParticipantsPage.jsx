@@ -184,9 +184,26 @@ const ManageParticipantsPage = () => {
     const employeeId = String(row.employeeId || "");
     const selectedRO = row.reportingOfficerId ? String(row.reportingOfficerId) : null;
     const selectedRevO = row.reviewingOfficerId ? String(row.reviewingOfficerId) : null;
+    const selectedAO = row.acceptingOfficerId ? String(row.acceptingOfficerId) : null;
+    const employeeDescendants = descendantsProvider.descendantsOf(employeeId);
 
     if (!cid || cid === employeeId) return false;
     if (!allUsers.some((u) => String(u.id) === cid)) return false;
+
+    if (field === "reportingOfficerId") {
+      // RO candidates must not include anyone in the employee's descendant subtree.
+      // This is evaluated immediately, even when RevO/AO are still empty.
+      if (employeeDescendants.has(cid)) {
+        return false;
+      }
+      // if (selectedRevO && isInOfficerSubgraph(cid, selectedRevO)) {
+      //   return false;
+      // }
+      // if (selectedAO && isInOfficerSubgraph(cid, selectedAO)) {
+      //   return false;
+      // }
+      return true;
+    }
 
     if (field === "reviewingOfficerId") {
       if (selectedRO && isInOfficerSubgraph(cid, selectedRO)) {
@@ -214,6 +231,11 @@ const ManageParticipantsPage = () => {
     // Base list: never allow selecting the same employee as their own officer.
     let candidates = allUsers.filter((u) => u.id !== employeeId);
 
+    if (field === "reportingOfficerId") {
+      candidates = candidates.filter((u) => isAllowedOfficerForField(row, "reportingOfficerId", u.id));
+      return candidates.map(buildOption);
+    }
+
     if (field === "reviewingOfficerId") {
       candidates = candidates.filter((u) => isAllowedOfficerForField(row, "reviewingOfficerId", u.id));
       return candidates.map(buildOption);
@@ -234,34 +256,29 @@ const ManageParticipantsPage = () => {
         if (p.participantId !== participantId) return p;
         const next = { ...p, [field]: value || null };
 
-        // Keep dependent selections valid when RO/RevO changes.
-        if (field === "reportingOfficerId") {
-          if (
-            next.reviewingOfficerId &&
-            !isAllowedOfficerForField(next, "reviewingOfficerId", next.reviewingOfficerId)
-          ) {
-            next.reviewingOfficerId = null;
-          }
-          if (
-            next.acceptingOfficerId &&
-            !isAllowedOfficerForField(next, "acceptingOfficerId", next.acceptingOfficerId)
-          ) {
-            next.acceptingOfficerId = null;
-          }
+        // Keep all selections valid after any change (RO/RevO/AO).
+        if (
+          next.reportingOfficerId &&
+          !isAllowedOfficerForField(next, "reportingOfficerId", next.reportingOfficerId)
+        ) {
+          next.reportingOfficerId = null;
+        }
+        if (
+          next.reviewingOfficerId &&
+          !isAllowedOfficerForField(next, "reviewingOfficerId", next.reviewingOfficerId)
+        ) {
+          next.reviewingOfficerId = null;
+        }
+        if (
+          next.acceptingOfficerId &&
+          !isAllowedOfficerForField(next, "acceptingOfficerId", next.acceptingOfficerId)
+        ) {
+          next.acceptingOfficerId = null;
         }
 
-        if (field === "reviewingOfficerId") {
-          if (
-            next.acceptingOfficerId &&
-            !isAllowedOfficerForField(next, "acceptingOfficerId", next.acceptingOfficerId)
-          ) {
-            next.acceptingOfficerId = null;
-          }
-        }
-
-        const ro = field === "reportingOfficerId" ? value || null : p.reportingOfficerId;
-        const revo = field === "reviewingOfficerId" ? value || null : next.reviewingOfficerId;
-        const ao = field === "acceptingOfficerId" ? value || null : next.acceptingOfficerId;
+        const ro = next.reportingOfficerId || null;
+        const revo = next.reviewingOfficerId || null;
+        const ao = next.acceptingOfficerId || null;
         next.assignmentStatus =
           ro && revo && ao ? "complete" : ro || revo || ao ? "partial" : "empty";
         return next;
