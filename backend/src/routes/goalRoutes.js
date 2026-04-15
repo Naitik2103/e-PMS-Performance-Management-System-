@@ -2,6 +2,7 @@ import express from "express";
 import {
   createGoal,
   updateGoal,
+  deleteGoal,
   submitCycleGoals,
   listMyGoals,
   listAllGoals,
@@ -22,6 +23,7 @@ router.get("/my", protect, authorizeRoles(ROLES.EMPLOYEE), listMyGoals);
 router.get("/all", protect, authorizeRoles(ROLES.HR_ADMIN), listAllGoals);
 router.post("/", protect, authorizeRoles(ROLES.EMPLOYEE), goalValidation, validate, createGoal);
 router.put("/:id", protect, authorizeRoles(ROLES.EMPLOYEE), goalValidation, validate, updateGoal);
+router.delete("/:id", protect, authorizeRoles(ROLES.EMPLOYEE), deleteGoal);
 router.post("/submit", protect, authorizeRoles(ROLES.EMPLOYEE), submitValidation, validate, submitCycleGoals);
 
 router.get("/pending/ro", protect, authorizeRoles(ROLES.REPORTING_OFFICER), listGoalsForRO);

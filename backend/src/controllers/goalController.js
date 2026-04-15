@@ -131,6 +131,31 @@ const updateGoal = async (req, res, next) => {
   }
 };
 
+  const deleteGoal = async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const r = await pool.query(
+        "SELECT goal_id, status FROM goals WHERE goal_id = $1 AND user_id = $2 LIMIT 1",
+        [id, req.user.id]
+      );
+      const goal = r.rows[0];
+      if (!goal) {
+        res.status(404);
+        return next(new Error("Goal not found"));
+      }
+      if (!["draft", "returned"].includes(goal.status)) {
+        res.status(400);
+        return next(new Error("Goal cannot be deleted at this stage"));
+      }
+
+      await pool.query("DELETE FROM goals WHERE goal_id = $1 AND user_id = $2", [id, req.user.id]);
+      await writeAudit({ user: req.user, action: "delete", entity: "goal", entityId: id });
+      return res.json({ message: "Goal deleted successfully" });
+    } catch (error) {
+      return next(error);
+    }
+  };
+
 const submitCycleGoals = async (req, res, next) => {
   try {
     const { cycleId, year } = req.body;
@@ -572,6 +597,7 @@ const sendbackGoalsByAppraisalId = async (req, res, next) => {
 export {
   createGoal,
   updateGoal,
+    deleteGoal,
   submitCycleGoals,
   listMyGoals,
   listAllGoals,

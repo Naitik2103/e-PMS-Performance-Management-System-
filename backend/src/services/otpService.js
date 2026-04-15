@@ -13,7 +13,7 @@ const createOtpForUser = async ({ userId, purpose, expiresInMinutes = 10 }) => {
   const otp = generateOtp();
   const token = hashOtp(otp);
   const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
-
+  
   await pool.query(
     `
     INSERT INTO password_reset_tokens (id, user_id, token, expires_at, used_at, created_at)

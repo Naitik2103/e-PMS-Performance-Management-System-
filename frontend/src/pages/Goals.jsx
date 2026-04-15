@@ -44,6 +44,21 @@ const Goals = () => {
     return map;
   }, [goals]);
 
+  // Get the total of all draft and returned goals (unsubmitted goals)
+  const draftGoalsTotal = useMemo(() => {
+    return goals
+      .filter((g) => ["draft", "returned"].includes(g.status))
+      .reduce((sum, g) => sum + Number(g.weightage || 0), 0);
+  }, [goals]);
+
+  // Check if there are any unsubmitted goals
+  const hasUnsubmittedGoals = useMemo(() => {
+    return goals.some((g) => ["draft", "returned"].includes(g.status));
+  }, [goals]);
+
+  const isWeightageComplete = Math.abs(draftGoalsTotal - 100) < 0.01; // Allow for floating point errors
+  const progressPercentage = Math.min((draftGoalsTotal / 100) * 100, 100);
+
   const handleSave = async () => {
     setError("");
     try {
@@ -86,6 +101,19 @@ const Goals = () => {
     });
   };
 
+  const handleDelete = async (goalId) => {
+    if (!window.confirm("Are you sure you want to delete this goal? This action cannot be undone.")) {
+      return;
+    }
+    setError("");
+    try {
+      await apiClient.delete(`/goals/${goalId}`);
+      loadGoals();
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to delete goal");
+    }
+  };
+
   const handleApprove = async (goalId, type, decision = "approve") => {
     try {
       await apiClient.post(`/goals/${goalId}/approve/${type}`, { decision });
@@ -124,7 +152,6 @@ const Goals = () => {
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
               <button className="btn" type="button" onClick={handleSave}>{editingId ? "Update" : "Save Draft"}</button>
-              <button className="btn secondary" type="button" onClick={() => handleSubmitGoals(Number(form.year))}>Submit Cycle Goals</button>
             </div>
           </div>
         </div>
@@ -160,7 +187,10 @@ const Goals = () => {
                 <td>
                   <div className="table-actions">
                     {user?.role === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
-                      <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
+                      <>
+                        <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
+                        <button className="btn ghost" type="button" style={{ color: "#f44336" }} onClick={() => handleDelete(goal.id)}>Remove</button>
+                      </>
                     )}
                     {user?.role === ROLES.REPORTING_OFFICER && (
                       <>
@@ -180,9 +210,54 @@ const Goals = () => {
             ))}
           </tbody>
         </table>
-        {user?.role === ROLES.EMPLOYEE && (
-          <div className="muted" style={{ paddingTop: 12 }}>
-            Current cycle total weightage: {Array.from(cycleTotals.values())[0]?.toFixed?.(2) || "0.00"} / 100.00
+        {user?.role === ROLES.EMPLOYEE && hasUnsubmittedGoals && (
+          <div style={{ paddingTop: 20, borderTop: "1px solid #e0e0e0" }}>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span className="muted">Goal Weightage Progress</span>
+                <span style={{ fontWeight: 600, color: isWeightageComplete ? "#4CAF50" : "#f44336" }}>
+                  {draftGoalsTotal.toFixed(2)} / 100.00
+                </span>
+              </div>
+              <div style={{
+                width: "100%",
+                height: 8,
+                backgroundColor: "#f0f0f0",
+                borderRadius: 4,
+                overflow: "hidden"
+              }}>
+                <div style={{
+                  width: `${progressPercentage}%`,
+                  height: "100%",
+                  backgroundColor: isWeightageComplete ? "#4CAF50" : "#2196F3",
+                  transition: "width 0.3s ease"
+                }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16 }}>
+              <div>
+                {!isWeightageComplete && (
+                  <div className="error-text" style={{ fontSize: "0.9em", margin: 0 }}>
+                    Total must equal 100.00 to submit (currently {draftGoalsTotal.toFixed(2)})
+                  </div>
+                )}
+                {isWeightageComplete && (
+                  <div style={{ color: "#4CAF50", fontSize: "0.9em", margin: 0, fontWeight: 500 }}>
+                    ✓ All goals ready to submit
+                  </div>
+                )}
+              </div>
+              <button
+                className="btn"
+                type="button"
+                disabled={!isWeightageComplete}
+                onClick={() => handleSubmitGoals(Number(form.year))}
+                title={isWeightageComplete ? "Submit all goals" : "Total weightage must equal 100.00 to submit"}
+              >
+                Submit Cycle Goals
+              </button>
+            </div>
           </div>
         )}
       </div>
