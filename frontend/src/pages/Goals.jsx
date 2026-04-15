@@ -61,12 +61,17 @@ const Goals = () => {
 
   const handleSave = async () => {
     setError("");
+    const weightage = Number(form.weightage);
+    if (Number.isFinite(weightage) && weightage > 100) {
+      setError("Weightage must be less than or equal to 100");
+      return;
+    }
     try {
       const payload = {
         year: Number(form.year),
         goalTitle: form.goalTitle,
         goalDescription: form.goalDescription,
-        weightage: Number(form.weightage)
+        weightage
       };
       if (editingId) {
         await apiClient.put(`/goals/goal/${editingId}`, payload);
@@ -125,7 +130,7 @@ const Goals = () => {
 
   return (
     <div className="page-content">
-      {user?.role === ROLES.EMPLOYEE && (
+      {user?.role === ROLES.EMPLOYEE && (goals.length === 0 || hasUnsubmittedGoals) && (
         <div className="card">
           <div className="card-header">
             <h2>{editingId ? "Edit Goal" : "Create Goal"}</h2>
@@ -138,7 +143,7 @@ const Goals = () => {
               </div>
               <div>
                 <label>Weightage</label>
-                <input type="number" min={0} max={100} value={form.weightage} onChange={(e) => setForm({ ...form, weightage: e.target.value })} />
+                <input type="number" min={0} max={100} step="0.01" value={form.weightage} onChange={(e) => setForm({ ...form, weightage: e.target.value })} />
               </div>
             </div>
             <div>
