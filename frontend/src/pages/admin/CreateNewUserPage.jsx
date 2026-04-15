@@ -9,6 +9,58 @@ const ROLE_OPTIONS = [
   { value: "hr_admin", label: "Admin" }
 ];
 
+const namePattern = /^\p{L}+$/u;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^[+]?([0-9\s()-]{7,20})$/;
+const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+const isValidName = (value) => namePattern.test(String(value || "").trim());
+const isValidEmail = (value) => emailPattern.test(String(value || "").trim());
+const isValidPhone = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return true;
+  if (!phonePattern.test(trimmed)) return false;
+  const digits = trimmed.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+};
+const isStrongPassword = (value) => strongPasswordPattern.test(String(value || ""));
+
+const generateStrongPassword = (length = 14) => {
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  const symbols = "!@#$%^&*()-_=+[]{};:,.?";
+  const all = upper + lower + digits + symbols;
+
+  const randomInt = (max) => {
+    if (window.crypto?.getRandomValues) {
+      const array = new Uint32Array(1);
+      window.crypto.getRandomValues(array);
+      return array[0] % max;
+    }
+    return Math.floor(Math.random() * max);
+  };
+
+  const randomChar = (chars) => chars[randomInt(chars.length)];
+
+  const chars = [
+    randomChar(upper),
+    randomChar(lower),
+    randomChar(digits),
+    randomChar(symbols)
+  ];
+
+  while (chars.length < length) {
+    chars.push(randomChar(all));
+  }
+
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+
+  return chars.join("");
+};
+
 const initials = (name) =>
   (name || "?")
     .split(/\s+/)
@@ -30,6 +82,82 @@ const CreateNewUserPage = () => {
     reportingTo: ""
   });
   const [fieldErrors, setFieldErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleNameChange = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    const trimmed = String(value || "").trim();
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (!trimmed) {
+        next[field] = "Required";
+      } else if (!isValidName(trimmed)) {
+        next[field] = "Only letters are allowed";
+      } else {
+        delete next[field];
+      }
+      return next;
+    });
+  };
+
+  const handleEmailChange = (value) => {
+    setForm((prev) => ({ ...prev, email: value }));
+    const trimmed = String(value || "").trim();
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (!trimmed) {
+        next.email = "Required";
+      } else if (!isValidEmail(trimmed)) {
+        next.email = "Enter a valid email address";
+      } else {
+        delete next.email;
+      }
+      return next;
+    });
+  };
+
+  const handlePhoneChange = (value) => {
+    setForm((prev) => ({ ...prev, phone: value }));
+    const trimmed = String(value || "").trim();
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (!trimmed) {
+        delete next.phone;
+      } else if (!isValidPhone(trimmed)) {
+        next.phone = "Enter a valid phone number format";
+      } else {
+        delete next.phone;
+      }
+      return next;
+    });
+  };
+
+  const handlePasswordChange = (value) => {
+    setForm((prev) => ({ ...prev, temporaryPassword: value }));
+    const trimmed = String(value || "").trim();
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (!trimmed) {
+        next.temporaryPassword = "Required, min 12 characters with upper, lower, number and symbol";
+      } else if (!isStrongPassword(trimmed)) {
+        next.temporaryPassword = "Use 12+ characters with upper, lower, number and symbol";
+      } else {
+        delete next.temporaryPassword;
+      }
+      return next;
+    });
+  };
+
+  const handleGeneratePassword = () => {
+    const password = generateStrongPassword();
+    setForm((prev) => ({ ...prev, temporaryPassword: password }));
+    setShowPassword(true);
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next.temporaryPassword;
+      return next;
+    });
+  };
 
   const { data: meta } = useQuery({
     queryKey: ["meta", "departments-designations"],
@@ -75,13 +203,18 @@ const CreateNewUserPage = () => {
   const validate = () => {
     const err = {};
     if (!form.firstName.trim()) err.firstName = "Required";
+    else if (!isValidName(form.firstName)) err.firstName = "Only letters are allowed";
     if (!form.lastName.trim()) err.lastName = "Required";
+    else if (!isValidName(form.lastName)) err.lastName = "Only letters are allowed";
     if (!form.email.trim()) err.email = "Required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) err.email = "Invalid email";
+    else if (!isValidEmail(form.email)) err.email = "Enter a valid email address";
+    if (form.phone.trim() && !isValidPhone(form.phone)) err.phone = "Enter a valid phone number format";
     if (!form.departmentId) err.departmentId = "Required";
     if (!form.role) err.role = "Required";
-    if (!form.temporaryPassword || form.temporaryPassword.length < 8) {
-      err.temporaryPassword = "Required, min 8 characters";
+    if (!form.temporaryPassword) {
+      err.temporaryPassword = "Required, min 12 characters with upper, lower, number and symbol";
+    } else if (!isStrongPassword(form.temporaryPassword)) {
+      err.temporaryPassword = "Use 12+ characters with upper, lower, number and symbol";
     }
     setFieldErrors(err);
     return Object.keys(err).length === 0;
@@ -101,6 +234,7 @@ const CreateNewUserPage = () => {
         temporaryPassword: "",
         reportingTo: ""
       });
+      setShowPassword(false);
       setFieldErrors({});
     },
     onError: (e) => {
@@ -154,12 +288,24 @@ const CreateNewUserPage = () => {
           <div className="form-row">
             <div>
               <label>First name</label>
-              <input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
+              <input
+                value={form.firstName}
+                onChange={(e) => handleNameChange("firstName", e.target.value)}
+                inputMode="text"
+                autoComplete="given-name"
+                aria-invalid={Boolean(fieldErrors.firstName)}
+              />
               {fieldErrors.firstName && <div className="error-text">{fieldErrors.firstName}</div>}
             </div>
             <div>
               <label>Last name</label>
-              <input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
+              <input
+                value={form.lastName}
+                onChange={(e) => handleNameChange("lastName", e.target.value)}
+                inputMode="text"
+                autoComplete="family-name"
+                aria-invalid={Boolean(fieldErrors.lastName)}
+              />
               {fieldErrors.lastName && <div className="error-text">{fieldErrors.lastName}</div>}
             </div>
           </div>
@@ -169,13 +315,22 @@ const CreateNewUserPage = () => {
               <input
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) => handleEmailChange(e.target.value)}
+                autoComplete="email"
+                aria-invalid={Boolean(fieldErrors.email)}
               />
               {fieldErrors.email && <div className="error-text">{fieldErrors.email}</div>}
             </div>
             <div>
               <label>Phone</label>
-              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input
+                value={form.phone}
+                onChange={(e) => handlePhoneChange(e.target.value)}
+                inputMode="tel"
+                autoComplete="tel"
+                aria-invalid={Boolean(fieldErrors.phone)}
+              />
+              {fieldErrors.phone && <div className="error-text">{fieldErrors.phone}</div>}
             </div>
           </div>
           <div className="form-row">
@@ -206,11 +361,25 @@ const CreateNewUserPage = () => {
           <div className="form-row">
             <div>
               <label>Temporary password</label>
-              <input
-                type="password"
-                value={form.temporaryPassword}
-                onChange={(e) => setForm({ ...form, temporaryPassword: e.target.value })}
-              />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={form.temporaryPassword}
+                  onChange={(e) => handlePasswordChange(e.target.value)}
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(fieldErrors.temporaryPassword)}
+                  style={{ flex: 1 }}
+                />
+                <button type="button" className="btn ghost" onClick={handleGeneratePassword}>
+                  Generate
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setShowPassword((prev) => !prev)}>
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              <div className="muted small" style={{ marginTop: 6 }}>
+                Strong password: 12+ chars, upper + lower case, number, and symbol.
+              </div>
               {fieldErrors.temporaryPassword && <div className="error-text">{fieldErrors.temporaryPassword}</div>}
             </div>
             <div />

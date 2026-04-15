@@ -7,7 +7,7 @@ const Tracking = () => {
   const { user } = useAuth();
   const [tracking, setTracking] = useState([]);
   const [goals, setGoals] = useState([]);
-  const [form, setForm] = useState({ goalId: "", cycleId: "", period: "H1", progressText: "" });
+  const [form, setForm] = useState({ goalId: "", cycleId: "", progressText: "" });
   const [error, setError] = useState("");
   const [remarks, setRemarks] = useState({});
 
@@ -63,31 +63,22 @@ const Tracking = () => {
             <h2>Submit Six-Month Tracking</h2>
           </div>
           <div className="form-grid">
-            <div className="form-row">
-              <div>
-                <label>Goal</label>
-                <select
-                  value={form.goalId}
-                  onChange={(e) => {
-                    const goal = goals.find((g) => g.id === e.target.value);
-                    setForm({ ...form, goalId: e.target.value, cycleId: goal?.cycleId || goal?.cycle?.id || "" });
-                  }}
-                >
-                  <option value="">Select a goal...</option>
-                  {goals.map((goal) => (
-                    <option key={goal.id} value={goal.id}>
-                      {goal.goalTitle} ({Number(goal.weightage).toFixed(2)}%)
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label>Period</label>
-                <select value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })}>
-                  <option value="H1">H1 (Jan - Jun)</option>
-                  <option value="H2">H2 (Jul - Dec)</option>
-                </select>
-              </div>
+            <div>
+              <label>Goal</label>
+              <select
+                value={form.goalId}
+                onChange={(e) => {
+                  const goal = goals.find((g) => g.id === e.target.value);
+                  setForm({ ...form, goalId: e.target.value, cycleId: goal?.cycleId || goal?.cycle?.id || "" });
+                }}
+              >
+                <option value="">Select a goal...</option>
+                {goals.map((goal) => (
+                  <option key={goal.id} value={goal.id}>
+                    {goal.goalTitle} ({Number(goal.weightage).toFixed(2)}%)
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label>Progress Text</label>
@@ -95,7 +86,7 @@ const Tracking = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={handleSave}>Submit Tracking</button>
+              <button className="btn" type="button" onClick={handleSave}>Submit Self Summary</button>
             </div>
           </div>
         </div>

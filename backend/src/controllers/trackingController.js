@@ -6,6 +6,7 @@ import { ROLES } from "../constants/rbac.js";
 const upsertTracking = async (req, res, next) => {
   try {
     const { goalId, cycleId, period, progressText } = req.body;
+    const trackingPeriod = period || "H1";
 
     const goalRes = await pool.query(
       "SELECT goal_id, user_id, cycle_id, appraisal_id FROM goals WHERE goal_id = $1 LIMIT 1",
@@ -60,7 +61,7 @@ const upsertTracking = async (req, res, next) => {
         userId: roId,
         senderId: req.user.id,
         title: "Six-Month Review Submitted",
-        message: `Employee submitted ${period} tracking for goal review.`,
+        message: `Employee submitted self summary for goal review (${trackingPeriod}).`,
         type: "tracking_submission",
         entity: "six_month_review",
         entityId: reviewId

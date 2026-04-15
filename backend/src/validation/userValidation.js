@@ -14,11 +14,34 @@ const allowedRoles = [
   "Admin"
 ];
 
+const namePattern = /^[\p{L}]+$/u;
+const phonePattern = /^[+]?([0-9\s()-]{7,20})$/;
+const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+
 const createUserValidation = [
-  body("firstName").trim().notEmpty().withMessage("First name is required"),
-  body("lastName").trim().notEmpty().withMessage("Last name is required"),
+  body("firstName")
+    .trim()
+    .notEmpty().withMessage("First name is required")
+    .matches(namePattern).withMessage("First name must contain letters only"),
+  body("lastName")
+    .trim()
+    .notEmpty().withMessage("Last name is required")
+    .matches(namePattern).withMessage("Last name must contain letters only"),
   body("email").isEmail().withMessage("Valid email is required"),
-  body("password").isLength({ min: 6 }).withMessage("Password must be at least 6 characters"),
+  body("phone")
+    .optional({ checkFalsy: true })
+    .matches(phonePattern).withMessage("Phone number must be valid")
+    .custom((value) => {
+      if (!value) return true;
+      const digits = String(value).replace(/\D/g, "");
+      if (digits.length < 10 || digits.length > 15) {
+        throw new Error("Phone number must contain 10 to 15 digits");
+      }
+      return true;
+    }),
+  body("password")
+    .isLength({ min: 12 }).withMessage("Password must be at least 12 characters")
+    .matches(strongPasswordPattern).withMessage("Password must include upper, lower, number and symbol"),
   body("role").optional().isIn(allowedRoles).withMessage("Invalid role"),
   body("department").trim().notEmpty().withMessage("Department is required"),
   body("reportingTo").optional({ checkFalsy: true }).isUUID().withMessage("reportingTo must be a valid UUID"),

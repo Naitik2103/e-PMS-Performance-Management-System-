@@ -23,8 +23,9 @@ const ensureDepartmentId = async (departmentName) => {
 
 const createUser = async (req, res, next) => {
   try {
-    const { firstName, lastName, email, password, role, department, reportingTo, reviewingOfficerId, acceptingOfficerId } = req.body;
+    const { firstName, lastName, email, phone, password, role, department, reportingTo, reviewingOfficerId, acceptingOfficerId } = req.body;
     const emailValue = (email || "").toLowerCase();
+    const phoneValue = phone ? String(phone).trim() : null;
 
     const exists = await pool.query("SELECT 1 FROM users WHERE LOWER(email) = $1 LIMIT 1", [emailValue]);
     if (exists.rows.length) {
@@ -39,15 +40,16 @@ const createUser = async (req, res, next) => {
     const inserted = await pool.query(
       `
       INSERT INTO users
-        (first_name, last_name, email, password_hash, role, department_id, ro_id, rew_id, ao_id, is_active)
+        (first_name, last_name, email, phone, password_hash, role, department_id, ro_id, rew_id, ao_id, is_active)
       VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
-      RETURNING user_id, first_name, last_name, email, role, ro_id, rew_id, ao_id, department_id, is_active
+        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,true)
+      RETURNING user_id, first_name, last_name, email, phone, role, ro_id, rew_id, ao_id, department_id, is_active
       `,
       [
         (firstName || "").trim() || null,
         (lastName || "").trim() || null,
         emailValue,
+        phoneValue,
         passwordHash,
         normalizedRole,
         departmentId,
@@ -68,6 +70,7 @@ const createUser = async (req, res, next) => {
       firstName: row.first_name,
       lastName: row.last_name,
       email: row.email,
+      phone: row.phone,
       role: row.role,
       department: dept.rows[0]?.name || department || null,
       reportingTo: row.ro_id,
