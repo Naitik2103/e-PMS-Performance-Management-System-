@@ -125,6 +125,15 @@ const Dashboard = () => {
     [ROLES.ACCEPTING_OFFICER]: "Employees to Accept",
   };
 
+  const openEmployeeGoals = (emp) => {
+    if (!emp?.employeeId || activeRole !== ROLES.REPORTING_OFFICER) return;
+    const params = new URLSearchParams({
+      employeeId: String(emp.employeeId),
+      employeeName: String(emp.employeeName || ""),
+    });
+    navigate(`/goals?${params.toString()}`);
+  };
+
   const statCards = [
     {
       icon: Target,
@@ -288,7 +297,20 @@ const Dashboard = () => {
             ) : (
               <div className="assignment-employee-list">
                 {assigned.employees.slice(0, 12).map((emp) => (
-                  <div key={emp.employeeId} className="assignment-employee-item">
+                  <div
+                    key={emp.employeeId}
+                    className="assignment-employee-item"
+                    onClick={() => openEmployeeGoals(emp)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openEmployeeGoals(emp);
+                      }
+                    }}
+                    role={activeRole === ROLES.REPORTING_OFFICER ? "button" : undefined}
+                    tabIndex={activeRole === ROLES.REPORTING_OFFICER ? 0 : undefined}
+                    style={activeRole === ROLES.REPORTING_OFFICER ? { cursor: "pointer" } : undefined}
+                  >
                     <div className="assignment-employee-avatar">{String(emp.employeeName || "?").trim().charAt(0).toUpperCase()}</div>
                     <div className="assignment-employee-meta">
                       <div className="assignment-employee-name">

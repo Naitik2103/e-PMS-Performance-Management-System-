@@ -6,6 +6,7 @@ import {
   listMyGoals,
   listAllGoals,
   listGoalsForRO,
+  listGoalsForROEmployee,
   listGoalsForReviewing,
   createGoal,
   updateGoal,
@@ -30,6 +31,7 @@ router.put("/goal/:id", protect, authorise([ROLES.EMPLOYEE]), updateGoal);
 router.delete("/:id", protect, authorise([ROLES.EMPLOYEE]), deleteGoal);
 router.post("/submit", protect, authorise([ROLES.EMPLOYEE]), submitCycleGoals);
 router.get("/pending/ro", protect, authorise([ROLES.REPORTING_OFFICER]), listGoalsForRO);
+router.get("/ro/employee/:employeeId", protect, authorise([ROLES.REPORTING_OFFICER]), listGoalsForROEmployee);
 router.get("/pending/review", protect, authorise([ROLES.REVIEWING_OFFICER]), listGoalsForReviewing);
 router.post("/:id/approve/ro", protect, authorise([ROLES.REPORTING_OFFICER]), approveGoalByRO);
 router.post("/:id/approve/review", protect, authorise([ROLES.REVIEWING_OFFICER]), approveGoalByReviewing);

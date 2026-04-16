@@ -17,6 +17,9 @@ const Goals = () => {
   const [isGoalPeriodActive, setIsGoalPeriodActive] = useState(false);
   const goalRowRefs = useRef(new Map());
   const activeRole = user?.selectedRole || user?.role;
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const selectedEmployeeId = searchParams.get("employeeId") || "";
+  const selectedEmployeeName = searchParams.get("employeeName") || "";
 
   useEffect(() => {
     setIsGoalPeriodActive(isGoalSettingPeriodActive(activeCycle));
@@ -28,8 +31,19 @@ const Goals = () => {
         const response = await apiClient.get("/goals/my");
         setGoals(response.data);
       } else if (activeRole === ROLES.REPORTING_OFFICER) {
-        const response = await apiClient.get("/goals/pending/ro");
-        setGoals(response.data);
+        if (selectedEmployeeId) {
+          try {
+            const response = await apiClient.get(`/goals/ro/employee/${encodeURIComponent(selectedEmployeeId)}`);
+            setGoals(response.data);
+          } catch {
+            // Fallback path for older tokens/guards: keep employee drill-down functional.
+            const response = await apiClient.get(`/goals/pending/ro?employeeId=${encodeURIComponent(selectedEmployeeId)}`);
+            setGoals(response.data);
+          }
+        } else {
+          const response = await apiClient.get("/goals/pending/ro");
+          setGoals(response.data);
+        }
       } else if (activeRole === ROLES.REVIEWING_OFFICER) {
         const response = await apiClient.get("/goals/pending/review");
         setGoals(response.data);
@@ -44,7 +58,7 @@ const Goals = () => {
 
   useEffect(() => {
     if (user) loadGoals();
-  }, [user, activeRole]);
+  }, [user, activeRole, selectedEmployeeId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -83,6 +97,29 @@ const Goals = () => {
   // Check if there are any unsubmitted goals
   const hasUnsubmittedGoals = useMemo(() => {
     return goals.some((g) => ["draft", "returned"].includes(g.status));
+  }, [goals]);
+
+  const groupedGoals = useMemo(() => {
+    const groups = [];
+    const groupsByEmployee = new Map();
+
+    goals.forEach((goal) => {
+      const employeeId = goal.employee?.id ?? `self-${goal.cycleId || "unknown"}`;
+
+      if (!groupsByEmployee.has(employeeId)) {
+        const group = {
+          employeeId,
+          employeeName: goal.employee?.name || "Self",
+          items: []
+        };
+        groupsByEmployee.set(employeeId, group);
+        groups.push(group);
+      }
+
+      groupsByEmployee.get(employeeId).items.push(goal);
+    });
+
+    return groups;
   }, [goals]);
 
   const isWeightageComplete = Math.abs(draftGoalsTotal - 100) < 0.01; // Allow for floating point errors
@@ -157,6 +194,8 @@ const Goals = () => {
     }
   };
 
+  const showGroupedByEmployee = activeRole === ROLES.REPORTING_OFFICER;
+
   return (
     <div className="page-content">
       {activeRole === ROLES.EMPLOYEE && !isGoalPeriodActive && (
@@ -218,10 +257,15 @@ const Goals = () => {
           <h2>Goals</h2>
           <span className="muted">{goals.length} record{goals.length !== 1 ? "s" : ""}</span>
         </div>
+        {activeRole === ROLES.REPORTING_OFFICER && selectedEmployeeId && (
+          <div className="muted" style={{ marginBottom: 12 }}>
+            Showing goals for <strong>{selectedEmployeeName || "selected employee"}</strong>
+          </div>
+        )}
         <table className="table">
           <thead>
             <tr>
-              <th>Employee</th>
+              {!showGroupedByEmployee && <th>Employee</th>}
               <th>Cycle</th>
               <th>Goal</th>
               <th>Weightage</th>
@@ -231,49 +275,87 @@ const Goals = () => {
           </thead>
           <tbody>
             {goals.length === 0 && (
-              <tr><td colSpan={6} className="table-empty">No goals found.</td></tr>
+              <tr><td colSpan={showGroupedByEmployee ? 5 : 6} className="table-empty">No goals found.</td></tr>
             )}
-            {goals.map((goal) => (
-              <tr
-                key={goal.id}
-                ref={(node) => {
-                  if (node) {
-                    goalRowRefs.current.set(String(goal.id), node);
-                  } else {
-                    goalRowRefs.current.delete(String(goal.id));
-                  }
-                }}
-                className={String(focusedGoalId) === String(goal.id) ? "row-highlight" : ""}
-              >
-                <td>{goal.employee?.name || "Self"}</td>
-                <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
-                <td>{goal.goalTitle}</td>
-                <td>{Number(goal.weightage).toFixed(2)}</td>
-                <td><StatusBadge status={goal.status} /></td>
-                <td>
-                  <div className="table-actions">
-                    {activeRole === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
-                      <>
-                        <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
-                        <button className="btn ghost" type="button" style={{ color: "#f44336" }} onClick={() => handleDelete(goal.id)}>Remove</button>
-                      </>
-                    )}
-                    {activeRole === ROLES.REPORTING_OFFICER && (
-                      <>
-                        <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
-                        <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
-                      </>
-                    )}
-                    {activeRole === ROLES.REVIEWING_OFFICER && (
-                      <>
-                        <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
-                        <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {showGroupedByEmployee
+              ? groupedGoals.map((group) => (
+                <React.Fragment key={group.employeeId}>
+                  <tr>
+                    <td colSpan={5} style={{ fontWeight: 700, background: "#f8fafc", color: "#1f2937" }}>
+                      {group.employeeName}
+                    </td>
+                  </tr>
+                  {group.items.map((goal) => (
+                    <tr
+                      key={goal.id}
+                      ref={(node) => {
+                        if (node) {
+                          goalRowRefs.current.set(String(goal.id), node);
+                        } else {
+                          goalRowRefs.current.delete(String(goal.id));
+                        }
+                      }}
+                      className={String(focusedGoalId) === String(goal.id) ? "row-highlight" : ""}
+                    >
+                      <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
+                      <td>
+                        <div>{goal.goalTitle}</div>
+                        <div className="muted" style={{ fontSize: "12px", marginTop: 4 }}>
+                          KPI: {goal.goalDescription || "-"}
+                        </div>
+                      </td>
+                      <td>{Number(goal.weightage).toFixed(2)}</td>
+                      <td><StatusBadge status={goal.status} /></td>
+                      <td>
+                        <div className="table-actions">
+                          <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
+                          <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))
+              : goals.map((goal) => (
+                <tr
+                  key={goal.id}
+                  ref={(node) => {
+                    if (node) {
+                      goalRowRefs.current.set(String(goal.id), node);
+                    } else {
+                      goalRowRefs.current.delete(String(goal.id));
+                    }
+                  }}
+                  className={String(focusedGoalId) === String(goal.id) ? "row-highlight" : ""}
+                >
+                  <td>{goal.employee?.name || "Self"}</td>
+                  <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
+                  <td>
+                    <div>{goal.goalTitle}</div>
+                    <div className="muted" style={{ fontSize: "12px", marginTop: 4 }}>
+                      KPI: {goal.goalDescription || "-"}
+                    </div>
+                  </td>
+                  <td>{Number(goal.weightage).toFixed(2)}</td>
+                  <td><StatusBadge status={goal.status} /></td>
+                  <td>
+                    <div className="table-actions">
+                      {activeRole === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
+                        <>
+                          <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
+                          <button className="btn ghost" type="button" style={{ color: "#f44336" }} onClick={() => handleDelete(goal.id)}>Remove</button>
+                        </>
+                      )}
+                      {activeRole === ROLES.REVIEWING_OFFICER && (
+                        <>
+                          <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
+                          <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
         {activeRole === ROLES.EMPLOYEE && hasUnsubmittedGoals && (
