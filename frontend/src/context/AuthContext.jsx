@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [preAuth, setPreAuth] = useState(null);
   const [authEpoch, setAuthEpoch] = useState(0);
+  const [activeCycle, setActiveCycle] = useState(null);
 
   const loadUser = async () => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -48,6 +49,24 @@ export const AuthProvider = ({ children }) => {
           }
         : null;
       setUser(nextUser);
+
+      // Fetch active cycle if user is authenticated
+      try {
+        const cycleResponse = await apiClient.get("/auth/active-cycle");
+        console.log("📅 Active Cycle Response:", cycleResponse.data);
+        if (cycleResponse.data) {
+          console.log("✅ Active cycle fetched successfully");
+          console.log("  Goal Setting: ", cycleResponse.data.goalSettingStart, " to ", cycleResponse.data.goalSettingEnd);
+          console.log("  Six-Month Review: ", cycleResponse.data.sixMonthProgressReviewStart, " to ", cycleResponse.data.sixMonthProgressReviewEnd);
+          console.log("  Annual Appraisal: ", cycleResponse.data.annualAppraisalStart, " to ", cycleResponse.data.annualAppraisalEnd);
+        } else {
+          console.log("⚠️ No active cycle found");
+        }
+        setActiveCycle(cycleResponse.data || null);
+      } catch (cycleError) {
+        console.error("❌ Failed to fetch active cycle:", cycleError);
+        setActiveCycle(null);
+      }
     } catch (error) {
       localStorage.removeItem(TOKEN_KEY);
     } finally {
@@ -76,6 +95,15 @@ export const AuthProvider = ({ children }) => {
         : null;
       setPreAuth(null);
       setUser(nextUser);
+
+      // Fetch active cycle after login
+      try {
+        const cycleResponse = await apiClient.get("/auth/active-cycle");
+        setActiveCycle(cycleResponse.data || null);
+      } catch {
+        setActiveCycle(null);
+      }
+
       setAuthEpoch((e) => e + 1);
       return { type: "auth", user: nextUser };
     }
@@ -105,6 +133,15 @@ export const AuthProvider = ({ children }) => {
       : null;
     setUser(nextUser);
     setPreAuth(null);
+
+    // Fetch active cycle after role selection
+    try {
+      const cycleResponse = await apiClient.get("/auth/active-cycle");
+      setActiveCycle(cycleResponse.data || null);
+    } catch {
+      setActiveCycle(null);
+    }
+
     setAuthEpoch((e) => e + 1);
     return nextUser;
   };
@@ -121,6 +158,15 @@ export const AuthProvider = ({ children }) => {
         }
       : null;
     setUser(nextUser);
+
+    // Fetch active cycle after role switch
+    try {
+      const cycleResponse = await apiClient.get("/auth/active-cycle");
+      setActiveCycle(cycleResponse.data || null);
+    } catch {
+      setActiveCycle(null);
+    }
+
     setAuthEpoch((e) => e + 1);
     return nextUser;
   };
@@ -132,12 +178,13 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem(PREAUTH_USER_KEY);
       setUser(null);
       setPreAuth(null);
+      setActiveCycle(null);
       setAuthEpoch((e) => e + 1);
     });
   };
 
   return (
-    <AuthContext.Provider value={{ user, preAuth, authEpoch, loading, login, logout, selectRole, switchRole }}>
+    <AuthContext.Provider value={{ user, preAuth, authEpoch, loading, activeCycle, login, logout, selectRole, switchRole }}>
       {children}
     </AuthContext.Provider>
   );

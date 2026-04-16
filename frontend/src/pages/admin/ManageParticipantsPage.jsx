@@ -257,23 +257,34 @@ const ManageParticipantsPage = () => {
       </div>
 
       <div className="admin-mp-controls">
-        <input
-          className="admin-mp-search"
-          placeholder="Search by employee name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select
-          className="admin-mp-filter"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ marginLeft: 10 }}
-        >
-          <option value="all">All</option>
-          <option value="fully_assigned">Fully assigned</option>
-          <option value="partial">Partial</option>
-          <option value="not_assigned">Not assigned</option>
-        </select>
+        <div className="admin-mp-control-group admin-mp-control-group--search">
+          <label className="admin-mp-control-label" htmlFor="mp-search">
+            Search employees
+          </label>
+          <input
+            id="mp-search"
+            className="admin-mp-search"
+            placeholder="Search by employee name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="admin-mp-control-group admin-mp-control-group--filter">
+          <label className="admin-mp-control-label" htmlFor="mp-status-filter">
+            Status filter
+          </label>
+          <select
+            id="mp-status-filter"
+            className="admin-mp-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All status</option>
+            <option value="fully_assigned">Fully assigned</option>
+            <option value="partial">Partial</option>
+            <option value="not_assigned">Not assigned</option>
+          </select>
+        </div>
       </div>
 
       {serverErrors.length > 0 && (
@@ -336,65 +347,77 @@ const ManageParticipantsPage = () => {
                   </td>
 
                   <td>
-                    <Select
-                      styles={selectStyles({ hasValue: Boolean(assignments.ro_id), isSuggested: false })}
-                      isClearable
-                      placeholder="— Select —"
-                      options={roOpts}
-                      value={roOpts.find((o) => o.value === assignments.ro_id) || null}
-                      onChange={(opt) => handleChange(employeeId, "ro", opt?.value || null)}
-                    />
-                    {topOfHierarchy && noRO && (
-                      <div className="muted small" style={{ marginTop: 6 }}>
-                        This employee is at the top of the hierarchy. RO assignment may not be required.
+                    <div className="admin-mp-field-stack">
+                      <Select
+                        styles={selectStyles({ hasValue: Boolean(assignments.ro_id), isSuggested: false })}
+                        isClearable
+                        placeholder="— Select —"
+                        options={roOpts}
+                        value={roOpts.find((o) => o.value === assignments.ro_id) || null}
+                        onChange={(opt) => handleChange(employeeId, "ro", opt?.value || null)}
+                      />
+                      <div className="admin-mp-help-slot">
+                        {topOfHierarchy && noRO && (
+                          <div className="muted small">
+                            This employee is at the top of the hierarchy. RO assignment may not be required.
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </td>
 
                   <td>
-                    <Select
-                      styles={selectStyles({ hasValue: Boolean(assignments.revo_id), isSuggested: Boolean(isSuggestedRevO) })}
-                      isClearable
-                      isDisabled={!assignments.ro_id}
-                      placeholder={!assignments.ro_id ? "Select RO first" : "— Select —"}
-                      options={revoOpts}
-                      value={revoOpts.find((o) => o.value === assignments.revo_id) || null}
-                      onChange={(opt) => handleChange(employeeId, "revo", opt?.value || null)}
-                    />
-                    {isSuggestedRevO && <div className="muted small" style={{ marginTop: 6 }}>Suggested</div>}
-                    {warnings?.revo && (
-                      <div className="small" style={{ marginTop: 6, color: "#8a5a00" }}>
-                        {warnings.revo}
+                    <div className="admin-mp-field-stack">
+                      <Select
+                        styles={selectStyles({ hasValue: Boolean(assignments.revo_id), isSuggested: Boolean(isSuggestedRevO) })}
+                        isClearable
+                        isDisabled={!assignments.ro_id}
+                        placeholder={!assignments.ro_id ? "Select RO first" : "— Select —"}
+                        options={revoOpts}
+                        value={revoOpts.find((o) => o.value === assignments.revo_id) || null}
+                        onChange={(opt) => handleChange(employeeId, "revo", opt?.value || null)}
+                      />
+                      <div className="admin-mp-help-slot">
+                        {isSuggestedRevO && <div className="muted small">Suggested</div>}
+                        {warnings?.revo && (
+                          <div className="small" style={{ color: "#8a5a00" }}>
+                            {warnings.revo}
+                          </div>
+                        )}
+                        {assignments.ro_id && revoOpts.length === 0 && (
+                          <div className="muted small">
+                            No higher-level officer available. RevO may be left unassigned for this employee.
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {assignments.ro_id && revoOpts.length === 0 && (
-                      <div className="muted small" style={{ marginTop: 6 }}>
-                        No higher-level officer available. RevO may be left unassigned for this employee.
-                      </div>
-                    )}
+                    </div>
                   </td>
 
                   <td>
-                    <Select
-                      styles={selectStyles({ hasValue: Boolean(assignments.ao_id), isSuggested: Boolean(isSuggestedAO) })}
-                      isClearable
-                      isDisabled={!assignments.revo_id}
-                      placeholder={!assignments.revo_id ? "Select RevO first" : "— Select —"}
-                      options={aoOpts}
-                      value={aoOpts.find((o) => o.value === assignments.ao_id) || null}
-                      onChange={(opt) => handleChange(employeeId, "ao", opt?.value || null)}
-                    />
-                    {isSuggestedAO && <div className="muted small" style={{ marginTop: 6 }}>Suggested</div>}
-                    {warnings?.ao && (
-                      <div className="small" style={{ marginTop: 6, color: "#8a5a00" }}>
-                        {warnings.ao}
+                    <div className="admin-mp-field-stack">
+                      <Select
+                        styles={selectStyles({ hasValue: Boolean(assignments.ao_id), isSuggested: Boolean(isSuggestedAO) })}
+                        isClearable
+                        isDisabled={!assignments.revo_id}
+                        placeholder={!assignments.revo_id ? "Select RevO first" : "— Select —"}
+                        options={aoOpts}
+                        value={aoOpts.find((o) => o.value === assignments.ao_id) || null}
+                        onChange={(opt) => handleChange(employeeId, "ao", opt?.value || null)}
+                      />
+                      <div className="admin-mp-help-slot">
+                        {isSuggestedAO && <div className="muted small">Suggested</div>}
+                        {warnings?.ao && (
+                          <div className="small" style={{ color: "#8a5a00" }}>
+                            {warnings.ao}
+                          </div>
+                        )}
+                        {assignments.revo_id && aoOpts.length === 0 && (
+                          <div className="muted small">
+                            No higher-level officer available. AO may be left unassigned for this employee.
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {assignments.revo_id && aoOpts.length === 0 && (
-                      <div className="muted small" style={{ marginTop: 6 }}>
-                        No higher-level officer available. AO may be left unassigned for this employee.
-                      </div>
-                    )}
+                    </div>
                   </td>
 
                   <td>

@@ -2,14 +2,20 @@ import React, { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../constants/rbac";
+import { isSixMonthReviewPeriodActive, formatDateDisplay } from "../utils/periodVisibility";
 
 const Tracking = () => {
-  const { user } = useAuth();
+  const { user, activeCycle } = useAuth();
   const [tracking, setTracking] = useState([]);
   const [goals, setGoals] = useState([]);
   const [form, setForm] = useState({ goalId: "", cycleId: "", progressText: "" });
   const [error, setError] = useState("");
   const [remarks, setRemarks] = useState({});
+  const [isSixMonthPeriodActive, setIsSixMonthPeriodActive] = useState(false);
+
+  useEffect(() => {
+    setIsSixMonthPeriodActive(isSixMonthReviewPeriodActive(activeCycle));
+  }, [activeCycle]);
 
   const loadData = async () => {
     try {
@@ -57,7 +63,27 @@ const Tracking = () => {
 
   return (
     <div className="page-content">
-      {user?.role === ROLES.EMPLOYEE && (
+      {user?.role === ROLES.EMPLOYEE && !isSixMonthPeriodActive && (
+        <div className="card" style={{ borderLeft: "4px solid #ff9800" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ fontSize: "24px" }}>⏰</div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>Six-Month Review Period Not Active</div>
+              <div style={{ color: "#666", fontSize: "14px" }}>
+                You can submit tracking updates only during the six-month review period.
+                {activeCycle?.sixMonthProgressReviewStart && (
+                  <>
+                    <br />
+                    <strong>Period:</strong> {formatDateDisplay(activeCycle.sixMonthProgressReviewStart)} to {formatDateDisplay(activeCycle.sixMonthProgressReviewEnd)}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {user?.role === ROLES.EMPLOYEE && isSixMonthPeriodActive && (
         <div className="card">
           <div className="card-header">
             <h2>Submit Six-Month Tracking</h2>
@@ -90,6 +116,10 @@ const Tracking = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {user?.role === ROLES.EMPLOYEE && !isSixMonthPeriodActive && (
+        <div style={{ marginTop: "16px" }} />
       )}
 
       <div className="card">

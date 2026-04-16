@@ -4,9 +4,11 @@ import { apiClient } from "../api/client";
 import { Target, BarChart2, ClipboardList, TrendingUp, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ROLES, roleLabel } from "../constants/rbac";
+import { getPeriodVisibility, formatDateDisplay, debugPeriodVisibility } from "../utils/periodVisibility";
+
 
 const Dashboard = () => {
-  const { user } = useAuth();
+  const { user, activeCycle } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ goals: 0, tracking: 0, reviews: 0, status: "Active" });
   const [assigned, setAssigned] = useState({
@@ -19,6 +21,19 @@ const Dashboard = () => {
     employees: [],
   });
   const [hasActiveCycle, setHasActiveCycle] = useState(false);
+  const [periodVisibility, setPeriodVisibility] = useState({
+    goalSetting: { isActive: false },
+    sixMonthReview: { isActive: false },
+    annualAppraisal: { isActive: false }
+  });
+
+  useEffect(() => {
+    if (activeCycle) {
+      setPeriodVisibility(getPeriodVisibility(activeCycle));
+      // Debug: Log period visibility information to console
+      debugPeriodVisibility(activeCycle);
+    }
+  }, [activeCycle]);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -248,6 +263,56 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Active Periods Card */}
+      {activeCycle && (
+        <div className="card dashboard-info-card">
+          <div className="card-header">
+            <h2>Active Appraisal Periods</h2>
+            <span className="muted">{activeCycle.year} Cycle</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px" }}>
+            {/* Goal Setting Period */}
+            <div style={{ padding: "12px", borderRadius: "8px", backgroundColor: periodVisibility.goalSetting.isActive ? "#eef2fb" : "#f5f5f5" }}>
+              <div style={{ fontWeight: 500, color: periodVisibility.goalSetting.isActive ? "#2b5fbf" : "#666", marginBottom: "4px" }}>
+                📋 Goal Setting
+              </div>
+              <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px" }}>
+                {formatDateDisplay(periodVisibility.goalSetting.startDate)} - {formatDateDisplay(periodVisibility.goalSetting.endDate)}
+              </div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: periodVisibility.goalSetting.isActive ? "#2b5fbf" : "#999" }}>
+                {periodVisibility.goalSetting.isActive ? "🟢 ACTIVE NOW" : "Inactive"}
+              </div>
+            </div>
+
+            {/* Six-Month Review Period */}
+            <div style={{ padding: "12px", borderRadius: "8px", backgroundColor: periodVisibility.sixMonthReview.isActive ? "#f0fdf4" : "#f5f5f5" }}>
+              <div style={{ fontWeight: 500, color: periodVisibility.sixMonthReview.isActive ? "#0d9488" : "#666", marginBottom: "4px" }}>
+                📊 Six-Month Review
+              </div>
+              <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px" }}>
+                {formatDateDisplay(periodVisibility.sixMonthReview.startDate)} - {formatDateDisplay(periodVisibility.sixMonthReview.endDate)}
+              </div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: periodVisibility.sixMonthReview.isActive ? "#0d9488" : "#999" }}>
+                {periodVisibility.sixMonthReview.isActive ? "🟢 ACTIVE NOW" : "Inactive"}
+              </div>
+            </div>
+
+            {/* Annual Appraisal Period */}
+            <div style={{ padding: "12px", borderRadius: "8px", backgroundColor: periodVisibility.annualAppraisal.isActive ? "#f5f3ff" : "#f5f5f5" }}>
+              <div style={{ fontWeight: 500, color: periodVisibility.annualAppraisal.isActive ? "#7c3aed" : "#666", marginBottom: "4px" }}>
+                ⭐ Annual Appraisal
+              </div>
+              <div style={{ fontSize: "12px", color: "#666", marginBottom: "8px" }}>
+                {formatDateDisplay(periodVisibility.annualAppraisal.startDate)} - {formatDateDisplay(periodVisibility.annualAppraisal.endDate)}
+              </div>
+              <div style={{ fontSize: "11px", fontWeight: 600, color: periodVisibility.annualAppraisal.isActive ? "#7c3aed" : "#999" }}>
+                {periodVisibility.annualAppraisal.isActive ? "🟢 ACTIVE NOW" : "Inactive"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,16 +1,26 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { ROLES } from "../constants/rbac";
+import { isAnnualAppraisalPeriodActive, formatDateDisplay } from "../utils/periodVisibility";
 
 const Reviews = () => {
-  const { user } = useAuth();
+  const { user, activeCycle } = useAuth();
+  const location = useLocation();
   const [reviews, setReviews] = useState([]);
   const [selfForm, setSelfForm] = useState({ year: new Date().getFullYear(), selfSummary: "" });
   const [ratingInputs, setRatingInputs] = useState({});
   const [remarkInputs, setRemarkInputs] = useState({});
   const [error, setError] = useState("");
+  const [focusedReviewId, setFocusedReviewId] = useState("");
+  const [isAnnualPeriodActive, setIsAnnualPeriodActive] = useState(false);
+  const reviewRowRefs = useRef(new Map());
+
+  useEffect(() => {
+    setIsAnnualPeriodActive(isAnnualAppraisalPeriodActive(activeCycle));
+  }, [activeCycle]);
 
   const loadReviews = async () => {
     try {
@@ -29,6 +39,23 @@ const Reviews = () => {
   useEffect(() => {
     if (user) loadReviews();
   }, [user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    setFocusedReviewId(params.get("focus") || "");
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!focusedReviewId) return;
+    const row = reviewRowRefs.current.get(String(focusedReviewId));
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("pulse-highlight");
+      const timer = window.setTimeout(() => row.classList.remove("pulse-highlight"), 1800);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [focusedReviewId, reviews]);
 
   const submitSelfSummary = async () => {
     setError("");
@@ -65,7 +92,27 @@ const Reviews = () => {
 
   return (
     <div className="page-content">
-      {user?.role === ROLES.EMPLOYEE && (
+      {user?.role === ROLES.EMPLOYEE && !isAnnualPeriodActive && (
+        <div className="card" style={{ borderLeft: "4px solid #ff9800" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ fontSize: "24px" }}>⏰</div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>Annual Appraisal Period Not Active</div>
+              <div style={{ color: "#666", fontSize: "14px" }}>
+                You can submit your self-appraisal only during the annual appraisal period.
+                {activeCycle?.annualAppraisalStart && (
+                  <>
+                    <br />
+                    <strong>Period:</strong> {formatDateDisplay(activeCycle.annualAppraisalStart)} to {formatDateDisplay(activeCycle.annualAppraisalEnd)}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
         <div className="card">
           <div className="card-header">
             <h2>Self Appraisal</h2>
@@ -116,7 +163,17 @@ const Reviews = () => {
           <tbody>
             {reviews.length === 0 && <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>}
             {reviews.map((review) => (
-              <tr key={review.id}>
+              <tr
+                key={review.id}
+                ref={(node) => {
+                  if (node) {
+                    reviewRowRefs.current.set(String(review.id), node);
+                  } else {
+                    reviewRowRefs.current.delete(String(review.id));
+                  }
+                }}
+                className={String(focusedReviewId) === String(review.id) ? "row-highlight" : ""}
+              >
                 <td>{review.employee?.name || "Self"}</td>
                 <td>{review.cycle?.name || review.cycle?.year || "-"}</td>
                 <td><StatusBadge status={review.status} /></td>

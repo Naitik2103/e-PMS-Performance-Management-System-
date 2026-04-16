@@ -1,25 +1,36 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
 import { ROLES } from "../constants/rbac";
+import { isGoalSettingPeriodActive, formatDateDisplay } from "../utils/periodVisibility";
 
 const Goals = () => {
-  const { user } = useAuth();
+  const { user, activeCycle } = useAuth();
+  const location = useLocation();
   const [goals, setGoals] = useState([]);
   const [form, setForm] = useState({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
+  const [focusedGoalId, setFocusedGoalId] = useState("");
+  const [isGoalPeriodActive, setIsGoalPeriodActive] = useState(false);
+  const goalRowRefs = useRef(new Map());
+  const activeRole = user?.selectedRole || user?.role;
+
+  useEffect(() => {
+    setIsGoalPeriodActive(isGoalSettingPeriodActive(activeCycle));
+  }, [activeCycle]);
 
   const loadGoals = async () => {
     try {
-      if (user?.role === ROLES.EMPLOYEE) {
+      if (activeRole === ROLES.EMPLOYEE) {
         const response = await apiClient.get("/goals/my");
         setGoals(response.data);
-      } else if (user?.role === ROLES.REPORTING_OFFICER) {
+      } else if (activeRole === ROLES.REPORTING_OFFICER) {
         const response = await apiClient.get("/goals/pending/ro");
         setGoals(response.data);
-      } else if (user?.role === ROLES.REVIEWING_OFFICER) {
+      } else if (activeRole === ROLES.REVIEWING_OFFICER) {
         const response = await apiClient.get("/goals/pending/review");
         setGoals(response.data);
       } else {
@@ -33,7 +44,25 @@ const Goals = () => {
 
   useEffect(() => {
     if (user) loadGoals();
-  }, [user]);
+  }, [user, activeRole]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextFocusedGoalId = params.get("focus") || "";
+    setFocusedGoalId(nextFocusedGoalId);
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!focusedGoalId) return;
+    const row = goalRowRefs.current.get(String(focusedGoalId));
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("pulse-highlight");
+      const timer = window.setTimeout(() => row.classList.remove("pulse-highlight"), 1800);
+      return () => window.clearTimeout(timer);
+    }
+    return undefined;
+  }, [focusedGoalId, goals]);
 
   const cycleTotals = useMemo(() => {
     const map = new Map();
@@ -130,7 +159,27 @@ const Goals = () => {
 
   return (
     <div className="page-content">
-      {user?.role === ROLES.EMPLOYEE && (goals.length === 0 || hasUnsubmittedGoals) && (
+      {activeRole === ROLES.EMPLOYEE && !isGoalPeriodActive && (
+        <div className="card" style={{ borderLeft: "4px solid #ff9800" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <div style={{ fontSize: "24px" }}>⏰</div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: "4px" }}>Goal Setting Period Not Active</div>
+              <div style={{ color: "#666", fontSize: "14px" }}>
+                You can create and edit goals only during the goal setting period.
+                {activeCycle?.goalSettingStart && (
+                  <>
+                    <br />
+                    <strong>Period:</strong> {formatDateDisplay(activeCycle.goalSettingStart)} to {formatDateDisplay(activeCycle.goalSettingEnd)}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeRole === ROLES.EMPLOYEE && isGoalPeriodActive && (
         <div className="card">
           <div className="card-header">
             <h2>{editingId ? "Edit Goal" : "Create Goal"}</h2>
@@ -183,7 +232,17 @@ const Goals = () => {
               <tr><td colSpan={6} className="table-empty">No goals found.</td></tr>
             )}
             {goals.map((goal) => (
-              <tr key={goal.id}>
+              <tr
+                key={goal.id}
+                ref={(node) => {
+                  if (node) {
+                    goalRowRefs.current.set(String(goal.id), node);
+                  } else {
+                    goalRowRefs.current.delete(String(goal.id));
+                  }
+                }}
+                className={String(focusedGoalId) === String(goal.id) ? "row-highlight" : ""}
+              >
                 <td>{goal.employee?.name || "Self"}</td>
                 <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
                 <td>{goal.goalTitle}</td>
@@ -191,19 +250,19 @@ const Goals = () => {
                 <td><StatusBadge status={goal.status} /></td>
                 <td>
                   <div className="table-actions">
-                    {user?.role === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
+                    {activeRole === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
                       <>
                         <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
                         <button className="btn ghost" type="button" style={{ color: "#f44336" }} onClick={() => handleDelete(goal.id)}>Remove</button>
                       </>
                     )}
-                    {user?.role === ROLES.REPORTING_OFFICER && (
+                    {activeRole === ROLES.REPORTING_OFFICER && (
                       <>
                         <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
                         <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
                       </>
                     )}
-                    {user?.role === ROLES.REVIEWING_OFFICER && (
+                    {activeRole === ROLES.REVIEWING_OFFICER && (
                       <>
                         <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
                         <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
@@ -215,7 +274,7 @@ const Goals = () => {
             ))}
           </tbody>
         </table>
-        {user?.role === ROLES.EMPLOYEE && hasUnsubmittedGoals && (
+        {activeRole === ROLES.EMPLOYEE && hasUnsubmittedGoals && (
           <div style={{ paddingTop: 20, borderTop: "1px solid #e0e0e0" }}>
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
