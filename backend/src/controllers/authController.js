@@ -47,6 +47,38 @@ const getActiveCycleId = async () => {
   return rows[0]?.cycle_id || null;
 };
 
+const getActiveCycleWithDates = async () => {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      cycle_id,
+      cycle_year AS year,
+      cycle_name AS name,
+      goal_setting_start AS "goalSettingStart",
+      goal_setting_end AS "goalSettingEnd",
+      six_month_progress_review_start AS "sixMonthProgressReviewStart",
+      six_month_progress_review_end AS "sixMonthProgressReviewEnd",
+      annual_appraisal_start AS "annualAppraisalStart",
+      annual_appraisal_end AS "annualAppraisalEnd",
+      (goal_setting_start IS NOT NULL AND goal_setting_end IS NOT NULL AND CURRENT_DATE BETWEEN goal_setting_start AND goal_setting_end) AS "isGoalSettingActive",
+      (six_month_progress_review_start IS NOT NULL AND six_month_progress_review_end IS NOT NULL AND CURRENT_DATE BETWEEN six_month_progress_review_start AND six_month_progress_review_end) AS "isSixMonthReviewActive",
+      (annual_appraisal_start IS NOT NULL AND annual_appraisal_end IS NOT NULL AND CURRENT_DATE BETWEEN annual_appraisal_start AND annual_appraisal_end) AS "isAnnualAppraisalActive",
+      CURRENT_DATE AS "serverDate",
+      status,
+      created_at AS "createdAt",
+      activated_at AS "activatedAt"
+    FROM appraisal_cycles
+    WHERE status = 'active'
+    ORDER BY
+      CASE WHEN CURRENT_DATE BETWEEN goal_setting_start AND goal_setting_end THEN 0 ELSE 1 END,
+      activated_at DESC NULLS LAST,
+      created_at DESC
+    LIMIT 1
+    `
+  );
+  return rows[0] || null;
+};
+
 const getAvailableRolesForActiveCycle = async (userId, primaryRole) => {
   const normalizedPrimary = normalizeRole(primaryRole);
   if (normalizedPrimary === ROLES.HR_ADMIN) return [ROLES.HR_ADMIN];
@@ -569,6 +601,40 @@ const switchRole = async (req, res, next) => {
   }
 };
 
+const getActiveCycle = async (req, res, next) => {
+  try {
+    const cycle = await getActiveCycleWithDates();
+    if (!cycle) {
+      return res.json(null);
+    }
+    
+    // Return date strings as-is from database (YYYY-MM-DD format)
+    // Do NOT convert to ISO strings to avoid timezone issues
+    const cycleDates = {
+      cycleId: cycle.cycle_id,
+      year: cycle.year,
+      name: cycle.name,
+      status: cycle.status,
+      goalSettingStart: cycle.goalSettingStart,
+      goalSettingEnd: cycle.goalSettingEnd,
+      sixMonthProgressReviewStart: cycle.sixMonthProgressReviewStart,
+      sixMonthProgressReviewEnd: cycle.sixMonthProgressReviewEnd,
+      annualAppraisalStart: cycle.annualAppraisalStart,
+      annualAppraisalEnd: cycle.annualAppraisalEnd,
+      isGoalSettingActive: cycle.isGoalSettingActive,
+      isSixMonthReviewActive: cycle.isSixMonthReviewActive,
+      isAnnualAppraisalActive: cycle.isAnnualAppraisalActive,
+      serverDate: cycle.serverDate,
+      createdAt: cycle.createdAt,
+      activatedAt: cycle.activatedAt
+    };
+    
+    return res.json(cycleDates);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   login,
   logout,
@@ -580,5 +646,6 @@ export {
   verifyPasswordResetOtp,
   resetPasswordWithOtp,
   resendEmailVerificationOtp,
-  verifyEmailOtp
+  verifyEmailOtp,
+  getActiveCycle
 };
