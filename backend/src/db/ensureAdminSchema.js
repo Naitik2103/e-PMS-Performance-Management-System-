@@ -120,6 +120,15 @@ const ensureAdminSchema = async (pool) => {
     );
   }
 
+  const { rows: appraisalExists } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'appraisals') AS ok`
+  );
+  if (appraisalExists[0]?.ok) {
+    // Appraisals can exist before RevO/AO assignments are configured in the cycle participants table.
+    await pool.query(`ALTER TABLE appraisals ALTER COLUMN revo_id DROP NOT NULL`);
+    await pool.query(`ALTER TABLE appraisals ALTER COLUMN ao_id DROP NOT NULL`);
+  }
+
   const { rows: seedDes } = await pool.query(`SELECT COUNT(1)::int AS c FROM designations`);
   if ((seedDes[0]?.c || 0) === 0) {
     await pool.query(`
