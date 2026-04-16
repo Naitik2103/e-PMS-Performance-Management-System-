@@ -14,6 +14,7 @@ import selfAppraisalRoutes from "./routes/selfAppraisal.js";
 import ratingsRoutes from "./routes/ratings.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import appraisalRoutes from "./routes/appraisalRoutes.js";
+import appraisalCycleParticipantsHybrid from "./routes/appraisalCycleParticipantsHybrid.js";
 import pool from "./config/db.js";
 import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
@@ -58,6 +59,10 @@ app.get("/api/health/db", async (req, res, next) => {
     return next(error);
   }
 });
+
+// Hybrid participant assignment APIs (HR admin protected).
+// Mounted after public health endpoints so /api/health stays reachable without auth.
+app.use("/api", appraisalCycleParticipantsHybrid);
 
 // Note: authz is enforced within each router via `protect` + `authorise(...)`.
 

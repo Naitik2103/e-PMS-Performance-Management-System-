@@ -19,6 +19,10 @@ const ensureAdminSchema = async (pool) => {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS designation_id uuid REFERENCES designations(id)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reporting_to uuid REFERENCES users(user_id)`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS org_level integer NOT NULL DEFAULT 1`);
+  await pool.query(
+    `COMMENT ON COLUMN users.org_level IS 'APAR org level: 1=Faculty/Staff, 2=HOD/Lab Head, 3=Dean/School Head, 4=Director/Vice Chancellor'`
+  );
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT NOW()`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT NOW()`);
 
@@ -68,6 +72,10 @@ const ensureAdminSchema = async (pool) => {
         reporting_officer_id uuid NULL REFERENCES users(user_id),
         reviewing_officer_id uuid NULL REFERENCES users(user_id),
         accepting_officer_id uuid NULL REFERENCES users(user_id),
+        reviewing_officer_not_required boolean NOT NULL DEFAULT false,
+        accepting_officer_not_required boolean NOT NULL DEFAULT false,
+        reviewing_officer_not_required_reason text NULL,
+        accepting_officer_not_required_reason text NULL,
         is_eligible boolean NOT NULL DEFAULT true,
         created_at timestamptz NOT NULL DEFAULT NOW(),
         updated_at timestamptz NOT NULL DEFAULT NOW(),
@@ -83,6 +91,18 @@ const ensureAdminSchema = async (pool) => {
   } else {
     await pool.query(`ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS id uuid`);
     await pool.query(`ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS is_eligible boolean DEFAULT true`);
+    await pool.query(
+      `ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS reviewing_officer_not_required boolean NOT NULL DEFAULT false`
+    );
+    await pool.query(
+      `ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS accepting_officer_not_required boolean NOT NULL DEFAULT false`
+    );
+    await pool.query(
+      `ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS reviewing_officer_not_required_reason text`
+    );
+    await pool.query(
+      `ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS accepting_officer_not_required_reason text`
+    );
     await pool.query(`ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT NOW()`);
     await pool.query(`ALTER TABLE appraisal_cycle_participants ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT NOW()`);
     await pool.query(

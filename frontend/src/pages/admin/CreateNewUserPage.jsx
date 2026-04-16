@@ -8,6 +8,12 @@ const ROLE_OPTIONS = [
   { value: "employee", label: "Employee" },
   { value: "hr_admin", label: "Admin" }
 ];
+const ORG_LEVEL_OPTIONS = [
+  { value: 1, label: "Level 1 - Faculty / Staff" },
+  { value: 2, label: "Level 2 - HOD / Lab Head" },
+  { value: 3, label: "Level 3 - Dean / School Head" },
+  { value: 4, label: "Level 4 - Director / Vice Chancellor" }
+];
 
 const namePattern = /^\p{L}+$/u;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -78,6 +84,7 @@ const CreateNewUserPage = () => {
     phone: "",
     departmentId: "",
     role: "employee",
+    orgLevel: "1",
     temporaryPassword: "",
     reportingTo: ""
   });
@@ -211,6 +218,8 @@ const CreateNewUserPage = () => {
     if (form.phone.trim() && !isValidPhone(form.phone)) err.phone = "Enter a valid phone number format";
     if (!form.departmentId) err.departmentId = "Required";
     if (!form.role) err.role = "Required";
+    if (!form.orgLevel) err.orgLevel = "Required";
+    else if (!["1", "2", "3", "4"].includes(String(form.orgLevel))) err.orgLevel = "Select a valid org level";
     if (!form.temporaryPassword) {
       err.temporaryPassword = "Required, min 12 characters with upper, lower, number and symbol";
     } else if (!isStrongPassword(form.temporaryPassword)) {
@@ -231,6 +240,7 @@ const CreateNewUserPage = () => {
         phone: "",
         departmentId: "",
         role: "employee",
+        orgLevel: "1",
         temporaryPassword: "",
         reportingTo: ""
       });
@@ -257,6 +267,7 @@ const CreateNewUserPage = () => {
       phone: form.phone.trim() || undefined,
       departmentId: form.departmentId,
       role: form.role,
+      orgLevel: Number(form.orgLevel),
       reportingTo: form.reportingTo || null,
       temporaryPassword: form.temporaryPassword
     });
@@ -357,6 +368,20 @@ const CreateNewUserPage = () => {
               </select>
               {fieldErrors.role && <div className="error-text">{fieldErrors.role}</div>}
             </div>
+          </div>
+          <div className="form-row">
+            <div>
+              <label>Org level</label>
+              <select value={form.orgLevel} onChange={(e) => setForm({ ...form, orgLevel: e.target.value })}>
+                {ORG_LEVEL_OPTIONS.map((lvl) => (
+                  <option key={lvl.value} value={String(lvl.value)}>
+                    {lvl.label}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.orgLevel && <div className="error-text">{fieldErrors.orgLevel}</div>}
+            </div>
+            <div />
           </div>
           <div className="form-row">
             <div>

@@ -86,6 +86,7 @@ const createHrUser = async (req, res, next) => {
       phone,
       departmentId,
       role,
+      orgLevel,
       reportingTo,
       temporaryPassword
     } = req.body;
@@ -100,6 +101,10 @@ const createHrUser = async (req, res, next) => {
 
     if (!firstName || !lastName || !emailValue || !departmentId || !role || !temporaryPassword) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+    const parsedOrgLevel = Number(orgLevel);
+    if (!Number.isInteger(parsedOrgLevel) || parsedOrgLevel < 1 || parsedOrgLevel > 4) {
+      return res.status(400).json({ error: "orgLevel must be an integer between 1 and 4" });
     }
     if (String(temporaryPassword).length < 8) {
       return res.status(400).json({ error: "Temporary password must be at least 8 characters" });
@@ -117,7 +122,7 @@ const createHrUser = async (req, res, next) => {
     const reportingToId = reportingTo || null;
 
     const returning = `
-      RETURNING user_id, first_name, last_name, full_name, employee_id, email, phone, role, department_id, designation_id, reporting_to, ro_id, is_active, created_at
+      RETURNING user_id, first_name, last_name, full_name, employee_id, email, phone, role, department_id, designation_id, reporting_to, ro_id, org_level, is_active, created_at
     `;
 
     const insertWithoutEmployeeId = () =>
@@ -126,12 +131,23 @@ const createHrUser = async (req, res, next) => {
         INSERT INTO users (
           first_name, last_name, full_name, employee_id, email, phone,
           department_id, designation_id, role, reporting_to, ro_id, rew_id, ao_id,
-          password_hash, is_active, created_at, updated_at
+          org_level, password_hash, is_active, created_at, updated_at
         )
-        VALUES ($1, $2, $3, NULL, $4, $5, $6, NULL, $7, $8, NULL, NULL, NULL, $9, true, NOW(), NOW())
+        VALUES ($1, $2, $3, NULL, $4, $5, $6, NULL, $7, $8, NULL, NULL, NULL, $9, $10, true, NOW(), NOW())
         ${returning}
         `,
-        [firstName, lastName, fullName, emailValue, phoneVal, departmentId, normalizedRole, reportingToId, hashedPassword]
+        [
+          firstName,
+          lastName,
+          fullName,
+          emailValue,
+          phoneVal,
+          departmentId,
+          normalizedRole,
+          reportingToId,
+          parsedOrgLevel,
+          hashedPassword
+        ]
       );
 
     const insertWithEmployeeId = (empId) =>
@@ -140,12 +156,24 @@ const createHrUser = async (req, res, next) => {
         INSERT INTO users (
           first_name, last_name, full_name, employee_id, email, phone,
           department_id, designation_id, role, reporting_to, ro_id, rew_id, ao_id,
-          password_hash, is_active, created_at, updated_at
+          org_level, password_hash, is_active, created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, NULL, NULL, NULL, $10, true, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, NULL, NULL, NULL, $10, $11, true, NOW(), NOW())
         ${returning}
         `,
-        [firstName, lastName, fullName, empId, emailValue, phoneVal, departmentId, normalizedRole, reportingToId, hashedPassword]
+        [
+          firstName,
+          lastName,
+          fullName,
+          empId,
+          emailValue,
+          phoneVal,
+          departmentId,
+          normalizedRole,
+          reportingToId,
+          parsedOrgLevel,
+          hashedPassword
+        ]
       );
 
     let inserted;
@@ -182,6 +210,7 @@ const createHrUser = async (req, res, next) => {
       department: dept.rows[0]?.name || null,
       designation: null,
       role: row.role,
+      orgLevel: row.org_level,
       reportingTo: row.reporting_to,
       isActive: row.is_active,
       createdAt: row.created_at
@@ -574,25 +603,89 @@ const activateCycle = async (req, res, next) => {
       return res.status(409).json({ error: "Another cycle is already active. Close it before activating this one." });
     }
 
-    const incomplete = await pool.query(
+    const { rows: users } = await pool.query(
       `
-      SELECT COALESCE(NULLIF(TRIM(u.full_name), ''), CONCAT_WS(' ', u.first_name, u.last_name)) AS full_name
+      SELECT user_id, COALESCE(org_level, 1) AS org_level
+      FROM users
+      WHERE is_active = true
+      `,
+    );
+    const userById = new Map(users.map((u) => [String(u.user_id), { id: String(u.user_id), level: Number(u.org_level) || 1 }]));
+    const hasHigherEligible = (level, excludedIds = []) => {
+      const excluded = new Set((excludedIds || []).filter(Boolean).map((v) => String(v)));
+      return users.some((u) => {
+        const uid = String(u.user_id);
+        const ul = Number(u.org_level) || 1;
+        return !excluded.has(uid) && ul > level;
+      });
+    };
+
+    const { rows: participantRows } = await pool.query(
+      `
+      SELECT
+        p.id,
+        p.employee_id,
+        p.reporting_officer_id,
+        p.reviewing_officer_id,
+        p.accepting_officer_id,
+        COALESCE(NULLIF(TRIM(u.full_name), ''), CONCAT_WS(' ', u.first_name, u.last_name)) AS full_name
       FROM appraisal_cycle_participants p
       JOIN users u ON u.user_id = p.employee_id
       WHERE p.cycle_id = $1
-        AND (
-          p.reporting_officer_id IS NULL
-          OR p.reviewing_officer_id IS NULL
-          OR p.accepting_officer_id IS NULL
-        )
+        AND u.is_active = true
       `,
       [cycleId]
     );
 
-    if (incomplete.rows.length > 0) {
+    const incompleteNames = [];
+
+    for (const p of participantRows) {
+      const employeeId = String(p.employee_id);
+      const roId = p.reporting_officer_id ? String(p.reporting_officer_id) : null;
+      const revoId = p.reviewing_officer_id ? String(p.reviewing_officer_id) : null;
+      const aoId = p.accepting_officer_id ? String(p.accepting_officer_id) : null;
+      const employeeLevel = userById.get(employeeId)?.level ?? 1;
+      const roLevel = roId ? userById.get(roId)?.level ?? null : null;
+      const revoLevel = revoId ? userById.get(revoId)?.level ?? null : null;
+
+      const roRequired = hasHigherEligible(employeeLevel, [employeeId]);
+      const revoRequired = roId ? hasHigherEligible(roLevel ?? employeeLevel, [employeeId, roId]) : false;
+      const aoRequired = revoId ? hasHigherEligible(revoLevel ?? employeeLevel, [employeeId, roId, revoId]) : false;
+
+      const revoNotRequired = !revoRequired;
+      const aoNotRequired = !aoRequired;
+      const revoReason = revoNotRequired
+        ? "No active higher-level officer exists above selected RO."
+        : null;
+      const aoReason = aoNotRequired
+        ? "No active higher-level officer exists above selected RevO."
+        : null;
+
+      await pool.query(
+        `
+        UPDATE appraisal_cycle_participants
+        SET
+          reviewing_officer_not_required = $2,
+          accepting_officer_not_required = $3,
+          reviewing_officer_not_required_reason = $4,
+          accepting_officer_not_required_reason = $5,
+          updated_at = NOW()
+        WHERE id = $1
+        `,
+        [p.id, revoNotRequired, aoNotRequired, revoReason, aoReason]
+      );
+
+      const isIncomplete =
+        (roRequired && !roId) ||
+        (revoRequired && !revoId) ||
+        (aoRequired && !aoId);
+      if (isIncomplete) incompleteNames.push(p.full_name);
+    }
+
+    if (incompleteNames.length > 0) {
       return res.status(422).json({
-        error: `Cannot activate — ${incomplete.rows.length} employees have incomplete assignments`,
-        incomplete: incomplete.rows.map((u) => u.full_name)
+        error: `Cannot activate — ${incompleteNames.length} employees have incomplete assignments`,
+        incomplete: incompleteNames
       });
     }
 

@@ -9,21 +9,34 @@ dotenv.config();
 
 const { Pool } = pkg;
 
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error(
+    "Missing DATABASE_URL. Create backend/.env and set DATABASE_URL to your Postgres connection string."
+  );
+}
+
+// Most managed Postgres providers (e.g. Neon) require SSL. Local Postgres usually doesn't.
+const useSsl =
+  (process.env.DB_SSL ?? "").toLowerCase() === "true" ||
+  (process.env.PGSSLMODE ?? "").toLowerCase() === "require";
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // required for Neon
-  },
+  connectionString: databaseUrl,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+});
+
+// Prevent process crash on transient idle client disconnects (common on managed Postgres).
+pool.on("error", (err) => {
+  console.error("Postgres pool idle client error:", err?.message || err);
 });
 
 // Compatibility export for legacy (Sequelize-based) controllers/routes that are still mounted.
 // New code should prefer `pool` for direct SQL.
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
+const sequelize = new Sequelize(databaseUrl, {
   dialect: "postgres",
   logging: false,
-  dialectOptions: {
-    ssl: { require: true, rejectUnauthorized: false }
-  }
+  dialectOptions: useSsl ? { ssl: { require: true, rejectUnauthorized: false } } : {},
 });
 
 const connectDb = async () => {
