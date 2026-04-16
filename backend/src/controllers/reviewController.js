@@ -95,7 +95,7 @@ const getActiveOrByYearCycle = async (cycleId, year) => {
 
 const ensureAppraisal = async (employeeId, cycleId) => {
   const existing = await pool.query(
-    "SELECT id, employee_id, cycle_id, ro_id, revo_id, ao_id, status, self_appraisal_id, ro_score, revo_score, ao_score, final_score FROM appraisals WHERE employee_id = $1 AND cycle_id = $2 LIMIT 1",
+    "SELECT id, employee_id, cycle_id, ro_id, revo_id, ao_id, status FROM appraisals WHERE employee_id = $1 AND cycle_id = $2 LIMIT 1",
     [employeeId, cycleId]
   );
   if (existing.rows.length) return existing.rows[0];
@@ -114,7 +114,7 @@ const ensureAppraisal = async (employeeId, cycleId) => {
     `
     INSERT INTO appraisals (employee_id, cycle_id, ro_id, revo_id, ao_id, status)
     VALUES ($1,$2,$3,$4,$5,'draft')
-    RETURNING id, employee_id, cycle_id, ro_id, revo_id, ao_id, status, self_appraisal_id, ro_score, revo_score, ao_score, final_score
+    RETURNING id, employee_id, cycle_id, ro_id, revo_id, ao_id, status
     `,
     [
       employeeId,
@@ -164,6 +164,20 @@ const ensureGoalRatings = async ({ appraisalId, goals = [], providedRatings = []
   }
 };
 
+const resolveSelfAppraisalTable = async () => {
+  const { rows } = await pool.query(
+    `
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name IN ('appraisal_self_appraisal', 'appraisal_self_appraisals')
+    ORDER BY CASE WHEN table_name = 'appraisal_self_appraisal' THEN 0 ELSE 1 END
+    LIMIT 1
+    `
+  );
+  return rows[0]?.table_name || "appraisal_self_appraisals";
+};
+
 const submitSelfSummary = async (req, res, next) => {
   try {
     const { cycleId, year, selfSummary, goalRatings, reviewId } = req.body;
@@ -186,26 +200,31 @@ const submitSelfSummary = async (req, res, next) => {
     const dbAppraisal = appRes.rows[0];
     if (!dbAppraisal) return res.status(404).json({ error: "Appraisal not found" });
     if (dbAppraisal.employee_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
-    if (dbAppraisal.status !== "ro_approved") {
+    if (["revo_rated", "ao_accepted", "completed"].includes(dbAppraisal.status)) {
       return res.status(409).json({
         error: "Action not allowed in current appraisal state",
-        required: "ro_approved",
+        required: "not finalized",
         current: dbAppraisal.status
       });
     }
 
     const goalsRes = await pool.query(
-      "SELECT goal_id, status FROM goals WHERE appraisal_id = $1 AND status IN ('approved','submitted') ORDER BY created_at ASC",
-      [dbAppraisal.id]
+      "SELECT goal_id, status FROM goals WHERE user_id = $1 AND cycle_id = $2 ORDER BY created_at ASC",
+      [dbAppraisal.employee_id, dbAppraisal.cycle_id]
     );
     if (!goalsRes.rows.length) {
       return res.status(400).json({ error: "Please submit goals before self-appraisal" });
     }
 
-    const selfAppraisalId = dbAppraisal.self_appraisal_id || crypto.randomUUID();
+    const selfAppraisalTable = await resolveSelfAppraisalTable();
+    const existingSelfAppraisal = await pool.query(
+      `SELECT id FROM ${selfAppraisalTable} WHERE appraisal_id = $1 LIMIT 1`,
+      [dbAppraisal.id]
+    );
+    const selfAppraisalId = existingSelfAppraisal.rows[0]?.id || crypto.randomUUID();
     await pool.query(
       `
-      INSERT INTO appraisal_self_appraisals (id, appraisal_id, employee_id, cycle_id, self_summary, status, submitted_at, updated_at)
+      INSERT INTO ${selfAppraisalTable} (id, appraisal_id, employee_id, cycle_id, self_summary, status, submitted_at, updated_at)
       VALUES ($1,$2,$3,$4,$5,'submitted',NOW(),NOW())
       ON CONFLICT (appraisal_id)
       DO UPDATE SET self_summary = EXCLUDED.self_summary, status = 'submitted', submitted_at = NOW(), updated_at = NOW()
@@ -216,8 +235,8 @@ const submitSelfSummary = async (req, res, next) => {
     await ensureGoalRatings({ appraisalId: dbAppraisal.id, goals: goalsRes.rows, providedRatings: goalRatings || [] });
 
     await pool.query(
-      "UPDATE appraisals SET self_appraisal_id = $1, status = 'self_appraisal_done', self_appraisal_submitted_at = NOW() WHERE id = $2",
-      [selfAppraisalId, dbAppraisal.id]
+      "UPDATE appraisals SET status = 'self_appraisal_done', self_appraisal_submitted_at = NOW() WHERE id = $1",
+      [dbAppraisal.id]
     );
 
     const employee = await pool.query(
@@ -463,11 +482,60 @@ const listMyReviews = async (req, res, next) => {
       FROM appraisals a
       LEFT JOIN appraisal_cycles c ON c.cycle_id = a.cycle_id
       WHERE a.employee_id = $1
-      ORDER BY a.created_at DESC
+      ORDER BY a.id DESC
       `,
       [req.user.userId]
     );
     return res.json(rows);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const getMyGoalsForYearEnd = async (req, res, next) => {
+  try {
+    await ensureReviewSchema();
+    const { cycleId, year } = req.query;
+    const employeeId = req.user.userId || req.user.id;
+
+    const cycle = await getActiveOrByYearCycle(cycleId, year);
+    if (!cycle) return res.status(400).json({ error: "Appraisal cycle not found" });
+
+    // Ensure an appraisal exists so goal ratings can be saved immediately.
+    const appraisal = await ensureAppraisal(employeeId, cycle.cycle_id);
+
+    const goalsRes = await pool.query(
+      `
+      SELECT
+        g.goal_id,
+        g.goal_title,
+        g.goal_description,
+        g.status,
+        agr.self_rating,
+        agr.achievement_text
+      FROM goals g
+      LEFT JOIN appraisal_goal_ratings agr
+        ON agr.goal_id = g.goal_id
+       AND agr.appraisal_id = $1
+      WHERE g.user_id = $2
+        AND g.cycle_id = $3
+      ORDER BY g.created_at ASC
+      `,
+      [appraisal.id, employeeId, cycle.cycle_id]
+    );
+
+    return res.json({
+      appraisalId: appraisal.id,
+      cycleId: cycle.cycle_id,
+      goals: goalsRes.rows.map((g) => ({
+        id: g.goal_id,
+        goalTitle: g.goal_title,
+        goalDescription: g.goal_description,
+        status: g.status,
+        selfRating: g.self_rating,
+        achievementText: g.achievement_text
+      }))
+    });
   } catch (error) {
     return next(error);
   }
@@ -751,14 +819,89 @@ const getAoForm = async (req, res, next) => {
   }
 };
 
+const getAppraisalGoalsWithRatings = async (req, res, next) => {
+  try {
+    const { appraisalId } = req.params;
+    await ensureReviewSchema();
+
+    // Verify appraisal exists and belongs to user
+    const appRes = await pool.query("SELECT id, employee_id, cycle_id FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+    const appraisal = appRes.rows[0];
+    if (!appraisal) return res.status(404).json({ error: "Appraisal not found" });
+    if (appraisal.employee_id !== req.user.userId) {
+      return res.status(403).json({ error: "You don't have access to this appraisal" });
+    }
+
+    // Fetch goals with ratings for this appraisal (goals are linked by user_id and cycle_id)
+    const goalsRes = await pool.query(
+      `
+      SELECT
+        g.id,
+        g.goal_title as goalTitle,
+        g.goal_description as goalDescription,
+        agr.self_rating as selfRating,
+        agr.achievement_text as achievementText
+      FROM goals g
+      LEFT JOIN appraisal_goal_ratings agr ON agr.goal_id = g.id AND agr.appraisal_id = $1
+      WHERE g.user_id = $2 AND g.cycle_id = $3 AND g.status IN ('approved', 'submitted')
+      ORDER BY g.created_at ASC
+      `,
+      [appraisalId, appraisal.employee_id, appraisal.cycle_id]
+    );
+
+    return res.json({ goals: goalsRes.rows });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const updateGoalRating = async (req, res, next) => {
+  try {
+    const { appraisalId, goalId, selfRating } = req.body;
+    await ensureReviewSchema();
+
+    // Verify appraisal belongs to user
+    const appRes = await pool.query("SELECT id, employee_id, cycle_id FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+    const appraisal = appRes.rows[0];
+    if (!appraisal) return res.status(404).json({ error: "Appraisal not found" });
+    if (appraisal.employee_id !== req.user.userId) {
+      return res.status(403).json({ error: "You don't have access to this appraisal" });
+    }
+
+    // Verify goal belongs to user and cycle
+    const goalRes = await pool.query("SELECT id FROM goals WHERE id = $1 AND user_id = $2 AND cycle_id = $3 LIMIT 1", [goalId, appraisal.employee_id, appraisal.cycle_id]);
+    if (!goalRes.rows.length) return res.status(404).json({ error: "Goal not found in this appraisal" });
+
+    // Update or create goal rating
+    const id = crypto.randomUUID();
+    await pool.query(
+      `
+      INSERT INTO appraisal_goal_ratings (id, appraisal_id, goal_id, self_rating, updated_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (appraisal_id, goal_id)
+      DO UPDATE SET self_rating = EXCLUDED.self_rating, updated_at = NOW()
+      `,
+      [id, appraisalId, goalId, Number(selfRating || 3)]
+    );
+
+    await writeAudit({ user: req.user, action: "update", entity: "goal_rating", entityId: `${appraisalId}-${goalId}` });
+    return res.json({ success: true, selfRating: Number(selfRating || 3) });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   submitSelfSummary,
   rateByRO,
   reviewByReviewing,
   acceptByAccepting,
   listMyReviews,
+  getMyGoalsForYearEnd,
   listQueue,
   listAttributeMasters,
   getRevoForm,
-  getAoForm
+  getAoForm,
+  getAppraisalGoalsWithRatings,
+  updateGoalRating
 };

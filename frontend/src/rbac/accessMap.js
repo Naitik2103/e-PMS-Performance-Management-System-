@@ -38,7 +38,7 @@ export const appRoutes = Object.freeze([
   { path: "/unauthorized", public: true },
 
   { path: "/dashboard", layout: true, roles: ALL_AUTHED },
-  { path: "/goals", layout: true, roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER] },
+  { path: "/goals", layout: true, roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER] },
   { path: "/tracking", layout: true, roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER] },
   { path: "/reviews", layout: true, roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER] },
 
@@ -68,7 +68,7 @@ export const sidebarItems = Object.freeze([
     to: "/goals",
     icon: Target,
     label: "Goals",
-    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER],
+    roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER],
   },
   {
     key: "tracking",

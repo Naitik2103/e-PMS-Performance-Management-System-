@@ -32,20 +32,25 @@ const Goals = () => {
         setGoals(response.data);
       } else if (activeRole === ROLES.REPORTING_OFFICER) {
         if (selectedEmployeeId) {
-          try {
-            const response = await apiClient.get(`/goals/ro/employee/${encodeURIComponent(selectedEmployeeId)}`);
-            setGoals(response.data);
-          } catch {
-            // Fallback path for older tokens/guards: keep employee drill-down functional.
-            const response = await apiClient.get(`/goals/pending/ro?employeeId=${encodeURIComponent(selectedEmployeeId)}`);
-            setGoals(response.data);
-          }
+          const response = await apiClient.get(`/goals/ro/employee/${encodeURIComponent(selectedEmployeeId)}`);
+          setGoals(response.data);
         } else {
           const response = await apiClient.get("/goals/pending/ro");
           setGoals(response.data);
         }
       } else if (activeRole === ROLES.REVIEWING_OFFICER) {
-        const response = await apiClient.get("/goals/pending/review");
+        const response = await apiClient.get(
+          selectedEmployeeId
+            ? `/goals/pending/review?employeeId=${encodeURIComponent(selectedEmployeeId)}`
+            : "/goals/pending/review"
+        );
+        setGoals(response.data);
+      } else if (activeRole === ROLES.ACCEPTING_OFFICER) {
+        const response = await apiClient.get(
+          selectedEmployeeId
+            ? `/goals/pending/ao?employeeId=${encodeURIComponent(selectedEmployeeId)}`
+            : "/goals/pending/ao"
+        );
         setGoals(response.data);
       } else {
         const response = await apiClient.get("/goals/all");
@@ -195,6 +200,7 @@ const Goals = () => {
   };
 
   const showGroupedByEmployee = activeRole === ROLES.REPORTING_OFFICER;
+  const canTakeGoalAction = activeRole === ROLES.REPORTING_OFFICER;
 
   return (
     <div className="page-content">
@@ -257,7 +263,7 @@ const Goals = () => {
           <h2>Goals</h2>
           <span className="muted">{goals.length} record{goals.length !== 1 ? "s" : ""}</span>
         </div>
-        {activeRole === ROLES.REPORTING_OFFICER && selectedEmployeeId && (
+        {activeRole !== ROLES.EMPLOYEE && selectedEmployeeId && (
           <div className="muted" style={{ marginBottom: 12 }}>
             Showing goals for <strong>{selectedEmployeeName || "selected employee"}</strong>
           </div>
@@ -307,10 +313,12 @@ const Goals = () => {
                       <td>{Number(goal.weightage).toFixed(2)}</td>
                       <td><StatusBadge status={goal.status} /></td>
                       <td>
-                        <div className="table-actions">
-                          <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
-                          <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
-                        </div>
+                          {canTakeGoalAction && goal.status === "submitted" && (
+                            <div className="table-actions">
+                              <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
+                              <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
+                            </div>
+                          )}
                       </td>
                     </tr>
                   ))}
@@ -344,12 +352,6 @@ const Goals = () => {
                         <>
                           <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
                           <button className="btn ghost" type="button" style={{ color: "#f44336" }} onClick={() => handleDelete(goal.id)}>Remove</button>
-                        </>
-                      )}
-                      {activeRole === ROLES.REVIEWING_OFFICER && (
-                        <>
-                          <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
-                          <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
                         </>
                       )}
                     </div>

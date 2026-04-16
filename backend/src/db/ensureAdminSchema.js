@@ -140,6 +140,52 @@ const ensureAdminSchema = async (pool) => {
     `);
   }
 
+  // Create six_month_review table if it doesn't exist
+  const { rows: sixMonthExists } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'six_month_review') AS ok`
+  );
+  if (!sixMonthExists[0]?.ok) {
+    await pool.query(`
+      CREATE TABLE six_month_review (
+        review_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        employee_id uuid NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+        goal_id uuid NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
+        cycle_id uuid NOT NULL REFERENCES appraisal_cycles(cycle_id) ON DELETE CASCADE,
+        period VARCHAR(10) NOT NULL DEFAULT 'H1',
+        progress_text text NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'draft',
+        reporting_remarks text NULL,
+        submitted_at timestamptz NULL,
+        remarked_at timestamptz NULL,
+        created_at timestamptz NOT NULL DEFAULT NOW(),
+        updated_at timestamptz NOT NULL DEFAULT NOW(),
+        UNIQUE (employee_id, goal_id, cycle_id, period)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_six_month_employee ON six_month_review(employee_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_six_month_cycle ON six_month_review(cycle_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_six_month_status ON six_month_review(status)`);
+  } else {
+    // Ensure status column exists with default 'draft'
+    const { rows: cols } = await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'six_month_review'`
+    );
+    const colSet = new Set(cols.map((r) => r.column_name));
+    if (!colSet.has('status')) {
+      await pool.query(`ALTER TABLE six_month_review ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'draft'`);
+    }
+    if (colSet.has('submitted_at') && !colSet.has('period')) {
+      await pool.query(`ALTER TABLE six_month_review ADD COLUMN period VARCHAR(10) NOT NULL DEFAULT 'H1'`);
+    }
+    // Make submitted_at nullable if needed
+    const { rows: submitCol } = await pool.query(
+      `SELECT is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'six_month_review' AND column_name = 'submitted_at'`
+    );
+    if (submitCol[0]?.is_nullable === 'NO') {
+      await pool.query(`ALTER TABLE six_month_review ALTER COLUMN submitted_at DROP NOT NULL`);
+    }
+  }
+
 };
 
 export { ensureAdminSchema };

@@ -16,6 +16,16 @@ const getEvaluationDate = () => {
   return normalizeDate(new Date());
 };
 
+// Override specific window start dates via environment variables.
+const getEffectiveWindowStart = (databaseStart, envVarName) => {
+  const override = process.env[envVarName];
+  if (override) {
+    const parsed = normalizeDate(override);
+    if (parsed) return parsed;
+  }
+  return databaseStart;
+};
+
 const getWindowState = (evaluationDate, start, end) => {
   const startDate = normalizeDate(start);
   const endDate = normalizeDate(end);
@@ -33,23 +43,26 @@ const isWithinWindow = (evaluationDate, start, end) => {
   return getWindowState(evaluationDate, start, end) === "open";
 };
 
-const getCycleAccess = (cycle, evaluationDate = getEvaluationDate()) => ({
-  evaluationDate,
-  goalSettingState: getWindowState(evaluationDate, cycle?.goal_setting_start, cycle?.goal_setting_end),
-  goalSettingOpen: isWithinWindow(evaluationDate, cycle?.goal_setting_start, cycle?.goal_setting_end),
-  sixMonthState: getWindowState(
-    evaluationDate,
+const getCycleAccess = (cycle, evaluationDate = getEvaluationDate()) => {
+  const sixMonthStart = getEffectiveWindowStart(
     cycle?.six_month_progress_review_start,
-    cycle?.six_month_progress_review_end
-  ),
-  sixMonthOpen: isWithinWindow(
+    "APPRAISAL_SIX_MONTH_START_DATE"
+  );
+  const annualStart = getEffectiveWindowStart(
+    cycle?.annual_appraisal_start,
+    "APPRAISAL_ANNUAL_START_DATE"
+  );
+
+  return {
     evaluationDate,
-    cycle?.six_month_progress_review_start,
-    cycle?.six_month_progress_review_end
-  ),
-  annualState: getWindowState(evaluationDate, cycle?.annual_appraisal_start, cycle?.annual_appraisal_end),
-  annualOpen: isWithinWindow(evaluationDate, cycle?.annual_appraisal_start, cycle?.annual_appraisal_end)
-});
+    goalSettingState: getWindowState(evaluationDate, cycle?.goal_setting_start, cycle?.goal_setting_end),
+    goalSettingOpen: isWithinWindow(evaluationDate, cycle?.goal_setting_start, cycle?.goal_setting_end),
+    sixMonthState: getWindowState(evaluationDate, sixMonthStart, cycle?.six_month_progress_review_end),
+    sixMonthOpen: isWithinWindow(evaluationDate, sixMonthStart, cycle?.six_month_progress_review_end),
+    annualState: getWindowState(evaluationDate, annualStart, cycle?.annual_appraisal_end),
+    annualOpen: isWithinWindow(evaluationDate, annualStart, cycle?.annual_appraisal_end)
+  };
+};
 
 const assertCycleWindowOpen = ({ cycle, windowKey, message }) => {
   const access = getCycleAccess(cycle);

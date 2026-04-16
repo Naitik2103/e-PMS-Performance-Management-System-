@@ -53,6 +53,18 @@ const Dashboard = () => {
             apiClient.get("/reviews/queue"),
           ]);
           setStats({ goals: goals.data.length, tracking: tracking.data.length, reviews: reviews.data.length, status: "Active" });
+        } else if (user?.role === ROLES.REVIEWING_OFFICER) {
+          const [goals, reviews] = await Promise.all([
+            apiClient.get("/goals/pending/review"),
+            apiClient.get("/reviews/queue"),
+          ]);
+          setStats({ goals: goals.data.length, tracking: 0, reviews: reviews.data.length, status: "Active" });
+        } else if (user?.role === ROLES.ACCEPTING_OFFICER) {
+          const [goals, reviews] = await Promise.all([
+            apiClient.get("/goals/pending/ao"),
+            apiClient.get("/reviews/queue"),
+          ]);
+          setStats({ goals: goals.data.length, tracking: 0, reviews: reviews.data.length, status: "Active" });
         } else {
           const [goals, reviews] = await Promise.all([
             apiClient.get("/goals/all"),
@@ -124,9 +136,14 @@ const Dashboard = () => {
     [ROLES.REVIEWING_OFFICER]: "Employees to Review",
     [ROLES.ACCEPTING_OFFICER]: "Employees to Accept",
   };
+  const canOpenEmployeeGoals = [
+    ROLES.REPORTING_OFFICER,
+    ROLES.REVIEWING_OFFICER,
+    ROLES.ACCEPTING_OFFICER,
+  ].includes(activeRole);
 
   const openEmployeeGoals = (emp) => {
-    if (!emp?.employeeId || activeRole !== ROLES.REPORTING_OFFICER) return;
+    if (!emp?.employeeId || !canOpenEmployeeGoals) return;
     const params = new URLSearchParams({
       employeeId: String(emp.employeeId),
       employeeName: String(emp.employeeName || ""),
@@ -307,9 +324,9 @@ const Dashboard = () => {
                         openEmployeeGoals(emp);
                       }
                     }}
-                    role={activeRole === ROLES.REPORTING_OFFICER ? "button" : undefined}
-                    tabIndex={activeRole === ROLES.REPORTING_OFFICER ? 0 : undefined}
-                    style={activeRole === ROLES.REPORTING_OFFICER ? { cursor: "pointer" } : undefined}
+                    role={canOpenEmployeeGoals ? "button" : undefined}
+                    tabIndex={canOpenEmployeeGoals ? 0 : undefined}
+                    style={canOpenEmployeeGoals ? { cursor: "pointer" } : undefined}
                   >
                     <div className="assignment-employee-avatar">{String(emp.employeeName || "?").trim().charAt(0).toUpperCase()}</div>
                     <div className="assignment-employee-meta">

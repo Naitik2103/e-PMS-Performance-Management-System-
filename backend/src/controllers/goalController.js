@@ -473,6 +473,15 @@ const listGoalsForROEmployee = async (req, res, next) => {
 
 const listGoalsForReviewing = async (req, res, next) => {
   try {
+    const selectedEmployeeId = req.query?.employeeId ? String(req.query.employeeId) : null;
+    const params = [req.user.id];
+    let whereClause = "WHERE p.reviewing_officer_id = $1 AND g.status = 'approved'";
+
+    if (selectedEmployeeId) {
+      params.push(selectedEmployeeId);
+      whereClause = "WHERE g.user_id = $2 AND p.reviewing_officer_id = $1 AND g.status = 'approved'";
+    }
+
     const { rows } = await pool.query(
       `
       SELECT
@@ -494,11 +503,65 @@ const listGoalsForReviewing = async (req, res, next) => {
       LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
       LEFT JOIN users u ON u.user_id = g.user_id
       LEFT JOIN departments d ON d.id = u.department_id
-      WHERE p.reviewing_officer_id = $1 AND g.status = 'approved'
+      ${whereClause}
       ORDER BY g.created_at DESC
       `,
-      [req.user.id]
+      params
     );
+    const out = rows.map((g) => ({
+      id: g.goal_id,
+      goalTitle: g.goal_title,
+      goalDescription: g.goal_description,
+      weightage: g.weightage,
+      status: g.status,
+      cycleId: g.cycle_id,
+      cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
+      employee: { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
+    }));
+    return res.json(out);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const listGoalsForAccepting = async (req, res, next) => {
+  try {
+    const selectedEmployeeId = req.query?.employeeId ? String(req.query.employeeId) : null;
+    const params = [req.user.id];
+    let whereClause = "WHERE p.accepting_officer_id = $1 AND g.status = 'approved'";
+
+    if (selectedEmployeeId) {
+      params.push(selectedEmployeeId);
+      whereClause = "WHERE g.user_id = $2 AND p.accepting_officer_id = $1 AND g.status = 'approved'";
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        g.goal_id,
+        g.goal_title,
+        g.goal_description,
+        g.weightage,
+        g.status,
+        g.cycle_id,
+        c.cycle_name,
+        c.cycle_year,
+        u.user_id,
+        u.first_name,
+        u.last_name,
+        u.email,
+        d.name AS department
+      FROM goals g
+      JOIN appraisal_cycle_participants p ON p.cycle_id = g.cycle_id AND p.employee_id = g.user_id
+      LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+      LEFT JOIN users u ON u.user_id = g.user_id
+      LEFT JOIN departments d ON d.id = u.department_id
+      ${whereClause}
+      ORDER BY g.created_at DESC
+      `,
+      params
+    );
+
     const out = rows.map((g) => ({
       id: g.goal_id,
       goalTitle: g.goal_title,
@@ -729,6 +792,7 @@ export {
   listGoalsForRO,
   listGoalsForROEmployee,
   listGoalsForReviewing,
+  listGoalsForAccepting,
   approveGoalByRO,
   approveGoalByReviewing,
   getGoalsByAppraisalId,

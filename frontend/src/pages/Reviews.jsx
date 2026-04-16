@@ -16,7 +16,11 @@ const Reviews = () => {
   const [error, setError] = useState("");
   const [focusedReviewId, setFocusedReviewId] = useState("");
   const [isAnnualPeriodActive, setIsAnnualPeriodActive] = useState(false);
+  const [appraisalGoals, setAppraisalGoals] = useState([]);
+  const [currentAppraisalId, setCurrentAppraisalId] = useState("");
+  const [goalRatings, setGoalRatings] = useState({});
   const reviewRowRefs = useRef(new Map());
+  const activeCycleId = activeCycle?.cycleId || activeCycle?.id || "";
 
   useEffect(() => {
     setIsAnnualPeriodActive(isAnnualAppraisalPeriodActive(activeCycle));
@@ -36,9 +40,45 @@ const Reviews = () => {
     }
   };
 
+  const loadYearEndGoals = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (activeCycleId) params.set("cycleId", activeCycleId);
+      else params.set("year", String(selfForm.year));
+
+      const response = await apiClient.get(`/reviews/my-goals?${params.toString()}`);
+      setCurrentAppraisalId(response.data?.appraisalId || "");
+      setAppraisalGoals(response.data?.goals || []);
+    } catch (err) {
+      console.error("Failed to load goals:", err);
+      setAppraisalGoals([]);
+      setCurrentAppraisalId("");
+    }
+  };
+
+  const updateGoalRating = async (goalId, rating) => {
+    if (!currentAppraisalId) {
+      setError("Unable to save rating right now. Reload the page once.");
+      return;
+    }
+    try {
+      await apiClient.post("/reviews/goal-rating", { appraisalId: currentAppraisalId, goalId, selfRating: rating });
+      setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: rating }));
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update goal rating");
+    }
+  };
+
   useEffect(() => {
     if (user) loadReviews();
   }, [user]);
+
+  useEffect(() => {
+    // Show goals in parallel with self-summary form, without waiting for submit.
+    if (user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive) {
+      loadYearEndGoals();
+    }
+  }, [user?.role, isAnnualPeriodActive, activeCycleId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -63,6 +103,7 @@ const Reviews = () => {
       await apiClient.post("/reviews/self-summary", selfForm);
       setSelfForm({ year: new Date().getFullYear(), selfSummary: "" });
       loadReviews();
+      loadYearEndGoals();
     } catch (err) {
       setError(err.response?.data?.message || "Unable to submit summary");
     }
@@ -144,6 +185,54 @@ const Reviews = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
+        <div className="card">
+          <div className="card-header">
+            <h2>Annual Goals Rating</h2>
+            <span className="muted">Rate your achievement for each goal (1-5)</span>
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Goal</th>
+                <th>KPI (Description)</th>
+                <th style={{ width: 120 }}>Goal Rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {appraisalGoals.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="table-empty">No goals found for this cycle.</td>
+                </tr>
+              )}
+              {appraisalGoals.map((goal) => (
+                  <tr key={`${currentAppraisalId || "goal"}-${goal.id}`}>
+                    <td>{goal.goalTitle}</td>
+                    <td style={{ fontSize: "13px", color: "#666" }}>{goal.goalDescription || "-"}</td>
+                    <td>
+                      <select
+                        value={goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3}
+                        onChange={(e) => {
+                          const rating = Number(e.target.value);
+                          setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: rating }));
+                          updateGoalRating(goal.id, rating);
+                        }}
+                        style={{ maxWidth: 100 }}
+                      >
+                        <option value={1}>1 - Poor</option>
+                        <option value={2}>2 - Below Avg</option>
+                        <option value={3}>3 - Average</option>
+                        <option value={4}>4 - Good</option>
+                        <option value={5}>5 - Excellent</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
         </div>
       )}
 

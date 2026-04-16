@@ -5,10 +5,13 @@ import {
   reviewByReviewing,
   acceptByAccepting,
   listMyReviews,
+  getMyGoalsForYearEnd,
   listQueue,
   listAttributeMasters,
   getRevoForm,
-  getAoForm
+  getAoForm,
+  getAppraisalGoalsWithRatings,
+  updateGoalRating
 } from "../controllers/reviewController.js";
 import { selfSummaryValidation, roRatingValidation, remarkValidation } from "../validation/reviewValidation.js";
 import { validate } from "../middleware/validate.js";
@@ -19,10 +22,13 @@ import { ROLES } from "../constants/rbac.js";
 const router = express.Router();
 
 router.get("/my", protect, authorizeRoles(ROLES.EMPLOYEE), listMyReviews);
+router.get("/my-goals", protect, authorizeRoles(ROLES.EMPLOYEE), getMyGoalsForYearEnd);
 router.get("/queue", protect, listQueue);
 router.get("/attributes/master", protect, listAttributeMasters);
+router.get("/:appraisalId/goals", protect, authorizeRoles(ROLES.EMPLOYEE), getAppraisalGoalsWithRatings);
 
 router.post("/self-summary", protect, authorizeRoles(ROLES.EMPLOYEE), selfSummaryValidation, validate, submitSelfSummary);
+router.post("/goal-rating", protect, authorizeRoles(ROLES.EMPLOYEE), updateGoalRating);
 router.post("/ro-rate", protect, authorizeRoles(ROLES.REPORTING_OFFICER), roRatingValidation, validate, rateByRO);
 router.post("/review-approve", protect, authorizeRoles(ROLES.REVIEWING_OFFICER), remarkValidation, validate, reviewByReviewing);
 router.post("/accept", protect, authorizeRoles(ROLES.ACCEPTING_OFFICER), remarkValidation, validate, acceptByAccepting);

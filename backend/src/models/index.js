@@ -158,8 +158,13 @@ SixMonthReview.init(
     cycleId: { type: DataTypes.UUID, allowNull: false },
     period: { type: DataTypes.ENUM("H1", "H2"), allowNull: false },
     progressText: { type: DataTypes.TEXT, allowNull: false },
+    status: {
+      type: DataTypes.ENUM("draft", "submitted"),
+      allowNull: false,
+      defaultValue: "draft"
+    },
     reportingRemarks: { type: DataTypes.TEXT, allowNull: true },
-    submittedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    submittedAt: { type: DataTypes.DATE, allowNull: true },
     remarkedAt: { type: DataTypes.DATE, allowNull: true }
   },
   {

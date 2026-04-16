@@ -5,6 +5,7 @@ import pool from "../config/db.js";
 import bcrypt from "bcryptjs";
 import { OTP_PURPOSES, createOtpForUser, verifyOtpForUser, consumeOtp } from "../services/otpService.js";
 import { sendOtpEmail } from "../services/emailService.js";
+import { getCycleAccess } from "../services/cycleAccess.js";
 
 const tokenTtlMs = Number(process.env.JWT_EXPIRES_MS || 8 * 60 * 60 * 1000);
 const preAuthTtlSec = Number(process.env.PREAUTH_EXPIRES_IN_SECONDS || 5 * 60);
@@ -47,6 +48,16 @@ const getActiveCycleId = async () => {
   return rows[0]?.cycle_id || null;
 };
 
+const formatLocalDate = (date) => {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return null;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const getActiveCycleWithDates = async () => {
   const { rows } = await pool.query(
     `
@@ -54,29 +65,45 @@ const getActiveCycleWithDates = async () => {
       cycle_id,
       cycle_year AS year,
       cycle_name AS name,
-      goal_setting_start AS "goalSettingStart",
-      goal_setting_end AS "goalSettingEnd",
-      six_month_progress_review_start AS "sixMonthProgressReviewStart",
-      six_month_progress_review_end AS "sixMonthProgressReviewEnd",
-      annual_appraisal_start AS "annualAppraisalStart",
-      annual_appraisal_end AS "annualAppraisalEnd",
-      (goal_setting_start IS NOT NULL AND goal_setting_end IS NOT NULL AND CURRENT_DATE BETWEEN goal_setting_start AND goal_setting_end) AS "isGoalSettingActive",
-      (six_month_progress_review_start IS NOT NULL AND six_month_progress_review_end IS NOT NULL AND CURRENT_DATE BETWEEN six_month_progress_review_start AND six_month_progress_review_end) AS "isSixMonthReviewActive",
-      (annual_appraisal_start IS NOT NULL AND annual_appraisal_end IS NOT NULL AND CURRENT_DATE BETWEEN annual_appraisal_start AND annual_appraisal_end) AS "isAnnualAppraisalActive",
-      CURRENT_DATE AS "serverDate",
+      goal_setting_start,
+      goal_setting_end,
+      six_month_progress_review_start,
+      six_month_progress_review_end,
+      annual_appraisal_start,
+      annual_appraisal_end,
       status,
       created_at AS "createdAt",
       activated_at AS "activatedAt"
     FROM appraisal_cycles
     WHERE status = 'active'
-    ORDER BY
-      CASE WHEN CURRENT_DATE BETWEEN goal_setting_start AND goal_setting_end THEN 0 ELSE 1 END,
-      activated_at DESC NULLS LAST,
-      created_at DESC
+    ORDER BY activated_at DESC NULLS LAST, created_at DESC
     LIMIT 1
     `
   );
-  return rows[0] || null;
+
+  const cycle = rows[0] || null;
+  if (!cycle) return null;
+
+  const access = getCycleAccess(cycle);
+
+  return {
+    cycle_id: cycle.cycle_id,
+    year: cycle.year,
+    name: cycle.name,
+    goalSettingStart: cycle.goal_setting_start,
+    goalSettingEnd: cycle.goal_setting_end,
+    sixMonthProgressReviewStart: cycle.six_month_progress_review_start,
+    sixMonthProgressReviewEnd: cycle.six_month_progress_review_end,
+    annualAppraisalStart: cycle.annual_appraisal_start,
+    annualAppraisalEnd: cycle.annual_appraisal_end,
+    isGoalSettingActive: access.goalSettingOpen,
+    isSixMonthReviewActive: access.sixMonthOpen,
+    isAnnualAppraisalActive: access.annualOpen,
+    serverDate: formatLocalDate(access.evaluationDate),
+    status: cycle.status,
+    createdAt: cycle.createdAt,
+    activatedAt: cycle.activatedAt
+  };
 };
 
 const getAvailableRolesForActiveCycle = async (userId, primaryRole) => {

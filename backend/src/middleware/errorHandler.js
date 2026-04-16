@@ -3,6 +3,11 @@ const notFound = (req, res, next) => {
 };
 
 const errorHandler = (err, req, res, next) => {
+  // Surface runtime errors in terminal for faster debugging.
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.error("[API ERROR]", req.method, req.originalUrl, "\n", err?.stack || err);
+  }
   const statusCode =
     res.statusCode !== 200
       ? res.statusCode
