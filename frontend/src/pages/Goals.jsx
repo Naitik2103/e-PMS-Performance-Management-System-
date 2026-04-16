@@ -317,15 +317,9 @@ const Goals = () => {
               <button
                 className="btn"
                 type="button"
-                disabled={!isWeightageComplete || !goalWindowOpen}
+                disabled={!isWeightageComplete}
                 onClick={() => handleSubmitGoals(Number(form.year))}
-                title={
-                  !goalWindowOpen
-                    ? "Goal setting period is closed"
-                    : isWeightageComplete
-                      ? "Submit all goals"
-                      : "Total weightage must equal 100.00 to submit"
-                }
+                title={isWeightageComplete ? "Submit all goals" : "Total weightage must equal 100.00 to submit"}
               >
                 Submit Cycle Goals
               </button>
