@@ -10,6 +10,7 @@ const Tracking = () => {
   const [form, setForm] = useState({ goalId: "", cycleId: "", progressText: "" });
   const [error, setError] = useState("");
   const [remarks, setRemarks] = useState({});
+  const [accessWindow, setAccessWindow] = useState(null);
 
   const loadData = async () => {
     try {
@@ -33,6 +34,26 @@ const Tracking = () => {
   useEffect(() => {
     if (user) loadData();
   }, [user]);
+
+  useEffect(() => {
+    let alive = true;
+    const loadAccess = async () => {
+      if (user?.role !== ROLES.EMPLOYEE) return;
+      try {
+        const res = await apiClient.get("/appraisals/access-window");
+        if (alive) setAccessWindow(res.data?.access || null);
+      } catch {
+        if (alive) setAccessWindow(null);
+      }
+    };
+    loadAccess();
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  const sixMonthState = user?.role === ROLES.EMPLOYEE ? accessWindow?.sixMonthState || "closed" : "open";
+  const sixMonthOpen = sixMonthState === "open";
 
   const handleSave = async () => {
     setError("");
@@ -62,6 +83,16 @@ const Tracking = () => {
           <div className="card-header">
             <h2>Submit Six-Month Tracking</h2>
           </div>
+          {!sixMonthOpen && (
+            <div className="muted" style={{ marginBottom: 12 }}>
+              {sixMonthState === "not_started"
+                ? "Six-month progress period has not started yet."
+                : sixMonthState === "closed"
+                  ? "Six-month progress period is closed."
+                  : "Six-month progress period is not available."}{" "}
+              You can still view existing tracking records.
+            </div>
+          )}
           <div className="form-grid">
             <div>
               <label>Goal</label>
@@ -86,7 +117,9 @@ const Tracking = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={handleSave}>Submit Self Summary</button>
+              <button className="btn" type="button" onClick={handleSave} disabled={!sixMonthOpen}>
+                Submit Self Summary
+              </button>
             </div>
           </div>
         </div>

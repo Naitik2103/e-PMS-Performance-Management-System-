@@ -11,6 +11,7 @@ const Reviews = () => {
   const [ratingInputs, setRatingInputs] = useState({});
   const [remarkInputs, setRemarkInputs] = useState({});
   const [error, setError] = useState("");
+  const [accessWindow, setAccessWindow] = useState(null);
 
   const loadReviews = async () => {
     try {
@@ -29,6 +30,26 @@ const Reviews = () => {
   useEffect(() => {
     if (user) loadReviews();
   }, [user]);
+
+  useEffect(() => {
+    let alive = true;
+    const loadAccess = async () => {
+      if (user?.role !== ROLES.EMPLOYEE) return;
+      try {
+        const res = await apiClient.get("/appraisals/access-window");
+        if (alive) setAccessWindow(res.data?.access || null);
+      } catch {
+        if (alive) setAccessWindow(null);
+      }
+    };
+    loadAccess();
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  const annualState = user?.role === ROLES.EMPLOYEE ? accessWindow?.annualState || "closed" : "open";
+  const annualOpen = annualState === "open";
 
   const submitSelfSummary = async () => {
     setError("");
@@ -71,6 +92,16 @@ const Reviews = () => {
             <h2>Self Appraisal</h2>
             <span className="muted">Submit your annual self-appraisal</span>
           </div>
+          {!annualOpen && (
+            <div className="muted" style={{ marginBottom: 12 }}>
+              {annualState === "not_started"
+                ? "Annual appraisal period has not started yet."
+                : annualState === "closed"
+                  ? "Annual appraisal period is closed."
+                  : "Annual appraisal period is not available."}{" "}
+              You can view review workflow status.
+            </div>
+          )}
           <div className="form-grid">
             <div className="form-row">
               <div style={{ maxWidth: 180 }}>
@@ -92,7 +123,9 @@ const Reviews = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={submitSelfSummary}>Submit Summary</button>
+              <button className="btn" type="button" onClick={submitSelfSummary} disabled={!annualOpen}>
+                Submit Summary
+              </button>
             </div>
           </div>
         </div>

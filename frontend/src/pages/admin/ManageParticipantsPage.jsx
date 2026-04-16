@@ -47,7 +47,6 @@ const ManageParticipantsPage = () => {
   const [serverErrors, setServerErrors] = useState([]);
   const [confirmActivate, setConfirmActivate] = useState(false);
   const [rowUi, setRowUi] = useState(() => ({})); // { [employee_id]: { suggestions, warnings } }
-  const [savingByEmployeeId, setSavingByEmployeeId] = useState(() => ({}));
 
   const { data: allUsers = [] } = useQuery({
     queryKey: ["usersWithLevels"],
@@ -118,16 +117,59 @@ const ManageParticipantsPage = () => {
     });
   }, [localParticipants, search, statusFilter, usersById]);
 
-  const saveRowMutation = useMutation({
-    mutationFn: async ({ employeeId, assignments }) => {
-      const res = await apiClient.put(`/appraisal-cycles/${cycleId}/participants/${employeeId}`, assignments);
-      return res.data;
+  const baselineByEmployeeId = useMemo(() => {
+    const map = new Map();
+    for (const p of participants || []) {
+      map.set(String(p.employee_id), {
+        ro_id: p.ro_id || null,
+        revo_id: p.revo_id || null,
+        ao_id: p.ao_id || null
+      });
+    }
+    return map;
+  }, [participants]);
+
+  const dirtyParticipants = useMemo(
+    () =>
+      localParticipants.filter((p) => {
+        const key = String(p.employee_id);
+        const base = baselineByEmployeeId.get(key);
+        const curr = { ro_id: p.ro_id || null, revo_id: p.revo_id || null, ao_id: p.ao_id || null };
+        if (!base) return true;
+        return base.ro_id !== curr.ro_id || base.revo_id !== curr.revo_id || base.ao_id !== curr.ao_id;
+      }),
+    [baselineByEmployeeId, localParticipants]
+  );
+
+  const hasAnyHardErrors = useMemo(
+    () =>
+      localParticipants.some((p) => {
+        const hard = validateAssignmentsHard(
+          String(p.employee_id),
+          { ro_id: p.ro_id || null, revo_id: p.revo_id || null, ao_id: p.ao_id || null },
+          localParticipants
+        );
+        return hard.errors.length > 0;
+      }),
+    [localParticipants]
+  );
+
+  const saveAllMutation = useMutation({
+    mutationFn: async () => {
+      for (const p of dirtyParticipants) {
+        const employeeId = String(p.employee_id);
+        await apiClient.put(`/appraisal-cycles/${cycleId}/participants/${employeeId}`, {
+          ro_id: p.ro_id || null,
+          revo_id: p.revo_id || null,
+          ao_id: p.ao_id || null
+        });
+      }
     },
     onSuccess: (data) => {
-      if (Array.isArray(data?.warnings) && data.warnings.length) {
-        showToast("Saved with warnings (see row)", "success");
+      if (dirtyParticipants.length > 0) {
+        showToast(`Saved ${dirtyParticipants.length} changed row(s)`, "success");
       } else {
-        showToast("Saved", "success");
+        showToast("No changes to save");
       }
       setServerErrors([]);
       queryClient.invalidateQueries({ queryKey: ["participantsHybrid", cycleId] });
@@ -135,9 +177,9 @@ const ManageParticipantsPage = () => {
     onError: (err) => {
       const d = err.response?.data;
       if (err.response?.status === 422 && Array.isArray(d?.errors)) {
-        showToast("Row has errors", "error");
+        showToast(d.errors[0] || "One or more rows have errors", "error");
       } else {
-        showToast(d?.error || "Save failed", "error");
+        showToast(d?.error || "Save all failed", "error");
       }
     }
   });
@@ -274,6 +316,15 @@ const ManageParticipantsPage = () => {
           <option value="partial">Partial</option>
           <option value="not_assigned">Not assigned</option>
         </select>
+        <button
+          type="button"
+          className="btn"
+          style={{ marginLeft: 10 }}
+          disabled={saveAllMutation.isPending || hasAnyHardErrors || dirtyParticipants.length === 0}
+          onClick={() => saveAllMutation.mutate()}
+        >
+          Save all changes{dirtyParticipants.length > 0 ? ` (${dirtyParticipants.length})` : ""}
+        </button>
       </div>
 
       {serverErrors.length > 0 && (
@@ -320,8 +371,6 @@ const ManageParticipantsPage = () => {
 
               const noRO = roOpts.length === 0;
               const topOfHierarchy = empLevel >= 4;
-
-              const saving = Boolean(savingByEmployeeId[employeeId]) || saveRowMutation.isPending;
 
               return (
                 <tr key={employeeId}>
@@ -405,31 +454,6 @@ const ManageParticipantsPage = () => {
                         ))}
                       </div>
                     )}
-
-                    <div className="table-actions">
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={hardErrors.length > 0 || saving}
-                        onClick={async () => {
-                          setSavingByEmployeeId((prev) => ({ ...prev, [employeeId]: true }));
-                          try {
-                            await saveRowMutation.mutateAsync({
-                              employeeId,
-                              assignments: {
-                                ro_id: assignments.ro_id,
-                                revo_id: assignments.revo_id,
-                                ao_id: assignments.ao_id
-                              }
-                            });
-                          } finally {
-                            setSavingByEmployeeId((prev) => ({ ...prev, [employeeId]: false }));
-                          }
-                        }}
-                      >
-                        Save row
-                      </button>
-                    </div>
                   </td>
                 </tr>
               );
@@ -456,8 +480,8 @@ const ManageParticipantsPage = () => {
           <div className="modal-panel" role="dialog" onClick={(e) => e.stopPropagation()}>
             <h3>Activate cycle?</h3>
             <p>
-              Once activated, participant assignments cannot be changed. All employees will be notified and the
-              goal-setting window will open on {formatDateDisplay(goalStart)}. Proceed?
+              Once activated, all employees will be notified and the goal-setting window will open on{" "}
+              {formatDateDisplay(goalStart)}. Proceed?
             </p>
             <div className="action-row">
               <button type="button" className="btn ghost" onClick={() => setConfirmActivate(false)}>

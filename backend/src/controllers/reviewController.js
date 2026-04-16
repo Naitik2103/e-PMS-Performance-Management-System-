@@ -5,6 +5,7 @@ import { notifyUser } from "../services/notificationService.js";
 import { ROLES, roleMatches } from "../constants/rbac.js";
 import { computeScore } from "../services/scoreEngine.js";
 import { ensureIsROForAppraisal, ensureIsRevOForAppraisal, ensureIsAOForAppraisal } from "../services/relationshipGuards.js";
+import { assertCycleWindowOpen } from "../services/cycleAccess.js";
 
 let schemaEnsured = false;
 
@@ -170,6 +171,13 @@ const submitSelfSummary = async (req, res, next) => {
 
     const cycle = await getActiveOrByYearCycle(cycleId, year);
     if (!cycle) return res.status(400).json({ error: "Appraisal cycle not found" });
+    if (req.user.role === ROLES.EMPLOYEE) {
+      assertCycleWindowOpen({
+        cycle,
+        windowKey: "annualOpen",
+        message: "Year-end self-appraisal is not open for the current date."
+      });
+    }
 
     const appraisal = await ensureAppraisal(req.user.id, cycle.cycle_id);
     const targetAppraisalId = reviewId || appraisal.id;

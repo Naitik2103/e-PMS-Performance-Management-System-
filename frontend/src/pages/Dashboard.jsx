@@ -9,6 +9,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ goals: 0, tracking: 0, reviews: 0, status: "Active" });
+  const [accessWindow, setAccessWindow] = useState(null);
   const [assigned, setAssigned] = useState({
     mode: ROLES.EMPLOYEE,
     officers: {
@@ -49,6 +50,26 @@ const Dashboard = () => {
       }
     };
     if (user) loadStats();
+  }, [user]);
+
+  useEffect(() => {
+    let alive = true;
+    const loadAccess = async () => {
+      if (user?.role !== ROLES.EMPLOYEE) {
+        if (alive) setAccessWindow(null);
+        return;
+      }
+      try {
+        const res = await apiClient.get("/appraisals/access-window");
+        if (alive) setAccessWindow(res.data?.access || null);
+      } catch {
+        if (alive) setAccessWindow(null);
+      }
+    };
+    loadAccess();
+    return () => {
+      alive = false;
+    };
   }, [user]);
 
   useEffect(() => {
@@ -128,6 +149,11 @@ const Dashboard = () => {
     },
   ];
 
+  const sixMonthState = accessWindow?.sixMonthState || "closed";
+  const annualState = accessWindow?.annualState || "closed";
+
+  const visibleStatCards = user?.role === ROLES.EMPLOYEE ? statCards : statCards;
+
   return (
     <div className="dashboard-page">
       {/* Welcome Banner */}
@@ -141,7 +167,7 @@ const Dashboard = () => {
 
       {/* Stat Cards */}
       <div className="stat-cards-grid">
-        {statCards.map((card) => {
+        {visibleStatCards.map((card) => {
           const Icon = card.icon;
           return (
             <div className="stat-card" key={card.label}>
@@ -154,13 +180,34 @@ const Dashboard = () => {
                   <div className="stat-card-value" style={{ color: card.color }}>{card.value}</div>
                 </div>
               </div>
-              {card.action && (
-                <button
-                  className="stat-card-action"
-                  onClick={() => navigate(card.action)}
-                >
-                  {card.actionLabel} <ArrowRight size={14} />
-                </button>
+              {card.action && user?.role === ROLES.EMPLOYEE && (card.action === "/tracking" || card.action === "/reviews") ? (
+                sixMonthState !== "open" && card.action === "/tracking" ? (
+                  <div className="muted small" style={{ paddingTop: 10 }}>
+                    {sixMonthState === "not_started"
+                      ? "Six-month progress period has not started yet."
+                      : sixMonthState === "closed"
+                        ? "Six-month progress period is closed."
+                        : "Six-month progress period is not available."}
+                  </div>
+                ) : annualState !== "open" && card.action === "/reviews" ? (
+                  <div className="muted small" style={{ paddingTop: 10 }}>
+                    {annualState === "not_started"
+                      ? "Annual appraisal period has not started yet."
+                      : annualState === "closed"
+                        ? "Annual appraisal period is closed."
+                        : "Annual appraisal period is not available."}
+                  </div>
+                ) : (
+                  <button className="stat-card-action" onClick={() => navigate(card.action)}>
+                    {card.actionLabel} <ArrowRight size={14} />
+                  </button>
+                )
+              ) : (
+                card.action && (
+                  <button className="stat-card-action" onClick={() => navigate(card.action)}>
+                    {card.actionLabel} <ArrowRight size={14} />
+                  </button>
+                )
               )}
             </div>
           );

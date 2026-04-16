@@ -437,7 +437,9 @@ const getCycleParticipants = async (req, res, next) => {
           six_month_progress_review_end AS "sixMonthReviewEnd",
           annual_appraisal_start AS "annualAppraisalStart",
           annual_appraisal_end AS "annualAppraisalEnd",
-          status
+          status,
+          activated_at AS "activatedAt",
+          closed_at AS "closedAt"
         FROM appraisal_cycles
         WHERE cycle_id = $1
         LIMIT 1

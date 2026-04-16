@@ -10,6 +10,7 @@ const Goals = () => {
   const [form, setForm] = useState({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
+  const [accessWindow, setAccessWindow] = useState(null);
 
   const loadGoals = async () => {
     try {
@@ -34,6 +35,26 @@ const Goals = () => {
   useEffect(() => {
     if (user) loadGoals();
   }, [user]);
+
+  useEffect(() => {
+    let alive = true;
+    const loadAccess = async () => {
+      if (user?.role !== ROLES.EMPLOYEE) return;
+      try {
+        const res = await apiClient.get("/appraisals/access-window");
+        if (alive) setAccessWindow(res.data?.access || null);
+      } catch {
+        if (alive) setAccessWindow(null);
+      }
+    };
+    loadAccess();
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  const goalSettingState = user?.role === ROLES.EMPLOYEE ? accessWindow?.goalSettingState || "closed" : "open";
+  const goalWindowOpen = goalSettingState === "open";
 
   const cycleTotals = useMemo(() => {
     const map = new Map();
@@ -135,6 +156,16 @@ const Goals = () => {
           <div className="card-header">
             <h2>{editingId ? "Edit Goal" : "Create Goal"}</h2>
           </div>
+          {!goalWindowOpen && (
+            <div className="muted" style={{ marginBottom: 12 }}>
+              {goalSettingState === "not_started"
+                ? "Goal setting period has not started yet."
+                : goalSettingState === "closed"
+                  ? "Goal setting period is closed."
+                  : "Goal setting period is not available."}{" "}
+              You can still view submitted goals.
+            </div>
+          )}
           <div className="form-grid">
             <div className="form-row">
               <div>
@@ -156,7 +187,9 @@ const Goals = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={handleSave}>{editingId ? "Update" : "Save Draft"}</button>
+              <button className="btn" type="button" onClick={handleSave} disabled={!goalWindowOpen}>
+                {editingId ? "Update" : "Save Draft"}
+              </button>
             </div>
           </div>
         </div>
@@ -191,7 +224,7 @@ const Goals = () => {
                 <td><StatusBadge status={goal.status} /></td>
                 <td>
                   <div className="table-actions">
-                    {user?.role === ROLES.EMPLOYEE && ["draft", "returned"].includes(goal.status) && (
+                    {user?.role === ROLES.EMPLOYEE && goalWindowOpen && ["draft", "returned"].includes(goal.status) && (
                       <>
                         <button className="btn ghost" type="button" onClick={() => handleEdit(goal)}>Edit</button>
                         <button className="btn ghost" type="button" style={{ color: "#f44336" }} onClick={() => handleDelete(goal.id)}>Remove</button>
@@ -256,9 +289,15 @@ const Goals = () => {
               <button
                 className="btn"
                 type="button"
-                disabled={!isWeightageComplete}
+                disabled={!isWeightageComplete || !goalWindowOpen}
                 onClick={() => handleSubmitGoals(Number(form.year))}
-                title={isWeightageComplete ? "Submit all goals" : "Total weightage must equal 100.00 to submit"}
+                title={
+                  !goalWindowOpen
+                    ? "Goal setting period is closed"
+                    : isWeightageComplete
+                      ? "Submit all goals"
+                      : "Total weightage must equal 100.00 to submit"
+                }
               >
                 Submit Cycle Goals
               </button>
