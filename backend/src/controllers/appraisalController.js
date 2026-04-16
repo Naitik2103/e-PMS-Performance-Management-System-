@@ -1,5 +1,6 @@
 import pool from "../config/db.js";
 import { ROLES, normalizeRole, roleMatches } from "../constants/rbac.js";
+import { getCycleAccess } from "../services/cycleAccess.js";
 
 const mapAppraisalRow = (r) => ({
   ...r,
@@ -170,4 +171,59 @@ const getSummary = async (req, res, next) => {
   }
 };
 
-export { listMine, listMyTeam, listMyReviewList, listMyAcceptList, getSummary };
+const getAccessWindow = async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM appraisal_cycles
+      WHERE status = 'active'
+      ORDER BY activated_at DESC NULLS LAST, created_at DESC
+      LIMIT 1
+      `
+    );
+    const cycle = rows[0] || null;
+    if (!cycle) {
+      return res.json({
+        cycle: null,
+        access: {
+          goalSettingOpen: false,
+          goalSettingState: "closed",
+          sixMonthOpen: false,
+          sixMonthState: "closed",
+          annualOpen: false
+          ,
+          annualState: "closed"
+        }
+      });
+    }
+    const access = getCycleAccess(cycle);
+    return res.json({
+      cycle: {
+        id: cycle.cycle_id,
+        name: cycle.cycle_name,
+        status: cycle.status,
+        goalSettingStart: cycle.goal_setting_start,
+        goalSettingEnd: cycle.goal_setting_end,
+        sixMonthReviewStart: cycle.six_month_progress_review_start,
+        sixMonthReviewEnd: cycle.six_month_progress_review_end,
+        annualAppraisalStart: cycle.annual_appraisal_start,
+        annualAppraisalEnd: cycle.annual_appraisal_end
+      },
+      access: {
+        goalSettingOpen: access.goalSettingOpen,
+        goalSettingState: access.goalSettingState,
+        sixMonthOpen: access.sixMonthOpen,
+        sixMonthState: access.sixMonthState,
+        annualOpen: access.annualOpen
+        ,
+        annualState: access.annualState
+      },
+      evaluationDate: access.evaluationDate
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export { listMine, listMyTeam, listMyReviewList, listMyAcceptList, getSummary, getAccessWindow };

@@ -2,6 +2,7 @@ import { writeAudit } from "../services/auditService.js";
 import { notifyUser } from "../services/notificationService.js";
 import pool from "../config/db.js";
 import { ROLES } from "../constants/rbac.js";
+import { assertCycleWindowOpen } from "../services/cycleAccess.js";
 
 const upsertTracking = async (req, res, next) => {
   try {
@@ -19,6 +20,19 @@ const upsertTracking = async (req, res, next) => {
     }
 
     const effectiveCycleId = cycleId || goal.cycle_id;
+    const cycleRes = await pool.query("SELECT * FROM appraisal_cycles WHERE cycle_id = $1 LIMIT 1", [effectiveCycleId]);
+    const cycle = cycleRes.rows[0] || null;
+    if (!cycle) {
+      res.status(400);
+      return next(new Error("Appraisal cycle not found"));
+    }
+    if (req.user.role === ROLES.EMPLOYEE) {
+      assertCycleWindowOpen({
+        cycle,
+        windowKey: "sixMonthOpen",
+        message: "Six-month progress submission is not open for the current date."
+      });
+    }
     const existing = await pool.query(
       "SELECT review_id FROM six_month_review WHERE employee_id = $1 AND goal_id = $2 AND cycle_id = $3 LIMIT 1",
       [req.user.id, goalId, effectiveCycleId]

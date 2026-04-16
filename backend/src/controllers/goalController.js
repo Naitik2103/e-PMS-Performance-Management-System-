@@ -3,6 +3,7 @@ import { notifyUser } from "../services/notificationService.js";
 import { ROLES } from "../constants/rbac.js";
 import pool from "../config/db.js";
 import { ensureIsROForAppraisal } from "../services/relationshipGuards.js";
+import { assertCycleWindowOpen } from "../services/cycleAccess.js";
 
 const toNumber = (v) => Number(v || 0);
 
@@ -76,6 +77,13 @@ const createGoal = async (req, res, next) => {
       res.status(400);
       return next(new Error("Appraisal cycle not found"));
     }
+    if (req.user.role === ROLES.EMPLOYEE) {
+      assertCycleWindowOpen({
+        cycle,
+        windowKey: "goalSettingOpen",
+        message: "Goal setting is not open for the current date."
+      });
+    }
 
     const appraisal = await ensureAppraisal(req.user.id, cycle.cycle_id);
 
@@ -113,6 +121,28 @@ const updateGoal = async (req, res, next) => {
       res.status(400);
       return next(new Error("Goal cannot be edited at this stage"));
     }
+    const c = await pool.query(
+      `
+      SELECT c.*
+      FROM goals g
+      JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+      WHERE g.goal_id = $1
+      LIMIT 1
+      `,
+      [id]
+    );
+    const cycle = c.rows[0] || null;
+    if (!cycle) {
+      res.status(400);
+      return next(new Error("Appraisal cycle not found"));
+    }
+    if (req.user.role === ROLES.EMPLOYEE) {
+      assertCycleWindowOpen({
+        cycle,
+        windowKey: "goalSettingOpen",
+        message: "Goal setting is not open for the current date."
+      });
+    }
 
     await pool.query(
       `
@@ -147,6 +177,28 @@ const updateGoal = async (req, res, next) => {
         res.status(400);
         return next(new Error("Goal cannot be deleted at this stage"));
       }
+      const c = await pool.query(
+        `
+        SELECT c.*
+        FROM goals g
+        JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
+        WHERE g.goal_id = $1
+        LIMIT 1
+        `,
+        [id]
+      );
+      const cycle = c.rows[0] || null;
+      if (!cycle) {
+        res.status(400);
+        return next(new Error("Appraisal cycle not found"));
+      }
+      if (req.user.role === ROLES.EMPLOYEE) {
+        assertCycleWindowOpen({
+          cycle,
+          windowKey: "goalSettingOpen",
+          message: "Goal setting is not open for the current date."
+        });
+      }
 
       await pool.query("DELETE FROM goals WHERE goal_id = $1 AND user_id = $2", [id, req.user.id]);
       await writeAudit({ user: req.user, action: "delete", entity: "goal", entityId: id });
@@ -163,6 +215,13 @@ const submitCycleGoals = async (req, res, next) => {
     if (!cycle) {
       res.status(400);
       return next(new Error("Appraisal cycle not found"));
+    }
+    if (req.user.role === ROLES.EMPLOYEE) {
+      assertCycleWindowOpen({
+        cycle,
+        windowKey: "goalSettingOpen",
+        message: "Goal submission is not open for the current date."
+      });
     }
 
     const goals = await pool.query(

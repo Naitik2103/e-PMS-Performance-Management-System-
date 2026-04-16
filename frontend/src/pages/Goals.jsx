@@ -205,7 +205,9 @@ const Goals = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={handleSave}>{editingId ? "Update" : "Save Draft"}</button>
+              <button className="btn" type="button" onClick={handleSave}>
+                {editingId ? "Update" : "Save Draft"}
+              </button>
             </div>
           </div>
         </div>
@@ -315,9 +317,15 @@ const Goals = () => {
               <button
                 className="btn"
                 type="button"
-                disabled={!isWeightageComplete}
+                disabled={!isWeightageComplete || !goalWindowOpen}
                 onClick={() => handleSubmitGoals(Number(form.year))}
-                title={isWeightageComplete ? "Submit all goals" : "Total weightage must equal 100.00 to submit"}
+                title={
+                  !goalWindowOpen
+                    ? "Goal setting period is closed"
+                    : isWeightageComplete
+                      ? "Submit all goals"
+                      : "Total weightage must equal 100.00 to submit"
+                }
               >
                 Submit Cycle Goals
               </button>

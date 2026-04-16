@@ -139,7 +139,9 @@ const Reviews = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={submitSelfSummary}>Submit Summary</button>
+              <button className="btn" type="button" onClick={submitSelfSummary}>
+                Submit Summary
+              </button>
             </div>
           </div>
         </div>
