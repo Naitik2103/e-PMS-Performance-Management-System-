@@ -18,10 +18,19 @@ const Reviews = () => {
   const [isAnnualPeriodActive, setIsAnnualPeriodActive] = useState(false);
   const [appraisalGoals, setAppraisalGoals] = useState([]);
   const [currentAppraisalId, setCurrentAppraisalId] = useState("");
-  const [goalRatings, setGoalRatings] = useState({});
   const [achievementInputs, setAchievementInputs] = useState({});
+  const [isAnnualGoalsSubmitted, setIsAnnualGoalsSubmitted] = useState(false);
+  const [selectedReview, setSelectedReview] = useState(null);
+  const [selectedReviewGoals, setSelectedReviewGoals] = useState([]);
+  const [selectedReviewInputs, setSelectedReviewInputs] = useState({});
+  const [selectedReviewLoading, setSelectedReviewLoading] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [selectedEmployeeName, setSelectedEmployeeName] = useState("");
+  const [selectedCycleId, setSelectedCycleId] = useState("");
   const reviewRowRefs = useRef(new Map());
+  const autoOpenedEmployeeRef = useRef("");
   const activeCycleId = activeCycle?.cycleId || activeCycle?.id || "";
+  const activeRole = user?.selectedRole || user?.role;
 
   const currentReview = useMemo(() => {
     if (!Array.isArray(reviews) || reviews.length === 0) return null;
@@ -37,17 +46,60 @@ const Reviews = () => {
     [currentReview?.status]
   );
 
-  const annualRatingStats = useMemo(() => {
-    if (appraisalGoals.length === 0) {
-      return { total: 0, average: 0 };
+  const allFinalAchievementsFilled = useMemo(
+    () => appraisalGoals.length > 0 && appraisalGoals.every((goal) => {
+      const value = achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? "";
+      return String(value).trim().length > 0;
+    }),
+    [appraisalGoals, achievementInputs, currentAppraisalId]
+  );
+
+  const selectedReviewStage = useMemo(() => {
+    if (!selectedReview) return null;
+    if (selectedReview.status === "self_appraisal_done") {
+      return {
+        label: "Reporting Officer Review",
+        ratingKey: "roRating",
+        remarksKey: "roRemarks"
+      };
     }
-    const total = appraisalGoals.length;
-    const sum = appraisalGoals.reduce((acc, goal) => {
-      const selected = goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3;
-      return acc + Number(selected);
-    }, 0);
-    return { total, average: sum / total };
-  }, [appraisalGoals, goalRatings, currentAppraisalId]);
+    if (selectedReview.status === "ro_rated") {
+      return {
+        label: "Reviewing Officer Review",
+        ratingKey: "revoRating",
+        remarksKey: "revoRemarks"
+      };
+    }
+    if (selectedReview.status === "revo_rated") {
+      return {
+        label: "Accepting Officer Review",
+        ratingKey: "aoRating",
+        remarksKey: "aoRemarks"
+      };
+    }
+    return null;
+  }, [selectedReview]);
+
+  const selectedReviewComplete = useMemo(() => {
+    if (!selectedReviewStage || !selectedReviewGoals.length) return false;
+    return selectedReviewGoals.every((goal) => {
+      const current = selectedReviewInputs[goal.id] || {};
+      const rating = Number(current.rating ?? goal[selectedReviewStage.ratingKey] ?? 0);
+      const remarks = String(current.remarks ?? goal[selectedReviewStage.remarksKey] ?? "").trim();
+      return rating >= 1 && rating <= 5 && remarks.length > 0;
+    });
+  }, [selectedReviewStage, selectedReviewGoals, selectedReviewInputs]);
+
+  const visibleReviews = useMemo(() => {
+    let filtered = reviews;
+    if (selectedEmployeeId) {
+      filtered = filtered.filter((review) => String(review.employee?.id || review.employee_id || "") === String(selectedEmployeeId));
+    }
+    if (selectedCycleId) {
+      filtered = filtered.filter((review) => String(review.cycle_id || review.cycleId || "") === String(selectedCycleId));
+    }
+    return filtered;
+  }, [reviews, selectedEmployeeId, selectedCycleId]);
 
   useEffect(() => {
     setIsAnnualPeriodActive(isAnnualAppraisalPeriodActive(activeCycle));
@@ -55,7 +107,7 @@ const Reviews = () => {
 
   const loadReviews = async () => {
     try {
-      if (user?.role === ROLES.EMPLOYEE) {
+      if (activeRole === ROLES.EMPLOYEE) {
         const response = await apiClient.get("/reviews/my");
         setReviews(response.data);
       } else {
@@ -76,6 +128,7 @@ const Reviews = () => {
       const response = await apiClient.get(`/reviews/my-goals?${params.toString()}`);
       setCurrentAppraisalId(response.data?.appraisalId || "");
       setAppraisalGoals(response.data?.goals || []);
+      setIsAnnualGoalsSubmitted(false);
       const achievementMap = (response.data?.goals || []).reduce((acc, goal) => {
         acc[`${response.data?.appraisalId || ""}-${goal.id}`] = goal.achievementText || "";
         return acc;
@@ -89,19 +142,97 @@ const Reviews = () => {
     }
   };
 
+  const openReview = async (review) => {
+    setSelectedReviewLoading(true);
+    setError("");
+    try {
+      const response = await apiClient.get(`/reviews/${review.id}/goals`);
+      const goals = response.data?.goals || [];
+      setSelectedReview({
+        ...review,
+        detailStage: response.data?.stage || null,
+        canEdit: response.data?.canEdit,
+        selfSummary: response.data?.selfSummary || response.data?.self_summary || ""
+      });
+      setSelectedReviewGoals(goals);
+      const initialInputs = goals.reduce((acc, goal) => {
+        const stage = response.data?.stage;
+        const ratingKey = stage === ROLES.REPORTING_OFFICER ? "roRating" : stage === ROLES.REVIEWING_OFFICER ? "revoRating" : "aoRating";
+        const remarksKey = stage === ROLES.REPORTING_OFFICER ? "roRemarks" : stage === ROLES.REVIEWING_OFFICER ? "revoRemarks" : "aoRemarks";
+        acc[goal.id] = {
+          rating: goal[ratingKey] ?? "",
+          remarks: goal[remarksKey] ?? ""
+        };
+        return acc;
+      }, {});
+      setSelectedReviewInputs(initialInputs);
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to load review goals");
+    } finally {
+      setSelectedReviewLoading(false);
+    }
+  };
+
+  const submitSelectedReview = async () => {
+    if (!selectedReview) return;
+    setError("");
+    try {
+      const goalRatings = selectedReviewGoals.map((goal) => {
+        const current = selectedReviewInputs[goal.id] || {};
+        return {
+          goalId: goal.id,
+          rating: Number(current.rating || 0),
+          remarks: String(current.remarks || "").trim()
+        };
+      });
+
+      await apiClient.post("/reviews/goal-stage-submit", {
+        appraisalId: selectedReview.id,
+        goalRatings
+      });
+
+      setSelectedReview(null);
+      setSelectedReviewGoals([]);
+      setSelectedReviewInputs({});
+      loadReviews();
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to submit goal review");
+    }
+  };
+
   const updateGoalRating = async (goalId, payload) => {
     if (!currentAppraisalId) {
       setError("Unable to save rating right now. Reload the page once.");
       return;
     }
     try {
-      const selfRating = Number(payload?.selfRating ?? 3);
       const achievementText = String(payload?.achievementText || "");
-      await apiClient.post("/reviews/goal-rating", { appraisalId: currentAppraisalId, goalId, selfRating, achievementText });
-      setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: selfRating }));
+      await apiClient.post("/reviews/goal-rating", { appraisalId: currentAppraisalId, goalId, achievementText });
       setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: achievementText }));
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Failed to update goal rating");
+    }
+  };
+
+  const submitAnnualGoals = async () => {
+    setError("");
+    try {
+      const goalPayload = appraisalGoals.map((goal) => ({
+        goalId: goal.id,
+        achievementText: String(achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? "").trim()
+      }));
+
+      for (const goal of goalPayload) {
+        await updateGoalRating(goal.goalId, { achievementText: goal.achievementText });
+      }
+
+      await apiClient.post("/reviews/annual-goals/submit", {
+        appraisalId: currentAppraisalId,
+        goals: goalPayload
+      });
+      setIsAnnualGoalsSubmitted(true);
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to submit annual goals");
     }
   };
 
@@ -111,15 +242,31 @@ const Reviews = () => {
 
   useEffect(() => {
     // Show goals in parallel with self-summary form, without waiting for submit.
-    if (user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive) {
+    if (activeRole === ROLES.EMPLOYEE && isAnnualPeriodActive) {
       loadYearEndGoals();
     }
-  }, [user?.role, isAnnualPeriodActive, activeCycleId]);
+  }, [activeRole, isAnnualPeriodActive, activeCycleId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     setFocusedReviewId(params.get("focus") || "");
+    setSelectedEmployeeId(params.get("employeeId") || "");
+    setSelectedEmployeeName(params.get("employeeName") || "");
+    setSelectedCycleId(params.get("cycleId") || "");
   }, [location.search]);
+
+  useEffect(() => {
+    if (!selectedEmployeeId) {
+      autoOpenedEmployeeRef.current = "";
+      return;
+    }
+    const matched = visibleReviews[0] || null;
+    if (!matched) return;
+    const openKey = `${selectedEmployeeId}:${selectedCycleId || "all"}`;
+    if (autoOpenedEmployeeRef.current === openKey) return;
+    autoOpenedEmployeeRef.current = openKey;
+    openReview(matched);
+  }, [selectedEmployeeId, selectedCycleId, visibleReviews]);
 
   useEffect(() => {
     if (!focusedReviewId) return;
@@ -172,7 +319,7 @@ const Reviews = () => {
 
   return (
     <div className="page-content">
-      {user?.role === ROLES.EMPLOYEE && !isAnnualPeriodActive && (
+      {activeRole === ROLES.EMPLOYEE && !isAnnualPeriodActive && (
         <div className="card" style={{ borderLeft: "4px solid #ff9800" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <div style={{ fontSize: "24px" }}>⏰</div>
@@ -192,27 +339,17 @@ const Reviews = () => {
         </div>
       )}
 
-      {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
+      {activeRole === ROLES.EMPLOYEE && isAnnualPeriodActive && (
         <div className="card annual-rating-card">
           <div className="card-header">
-            <h2>Annual Goals Rating</h2>
-            <span className="muted">Original goal, six-month note, final achievement, and self-rating (1-5)</span>
+            <h2>Annual Goals</h2>
+            <span className="muted">Original goal, six-month note, and final achievement</span>
           </div>
           {isSelfAppraisalLocked && (
             <div className="annual-rating-lock-note">
-              Self-appraisal already submitted. Annual goal ratings are now locked.
+              Self-appraisal already submitted. Annual goals are now locked.
             </div>
           )}
-          <div className="annual-rating-summary">
-            <div className="annual-rating-chip">
-              <span className="annual-rating-chip-label">Goals</span>
-              <strong>{annualRatingStats.total}</strong>
-            </div>
-            <div className="annual-rating-chip">
-              <span className="annual-rating-chip-label">Average</span>
-              <strong>{annualRatingStats.average.toFixed(2)} / 5</strong>
-            </div>
-          </div>
 
           <div className="annual-rating-list" role="list">
             {appraisalGoals.length === 0 && (
@@ -252,45 +389,34 @@ const Reviews = () => {
                       }}
                       onBlur={(e) => {
                         if (isSelfAppraisalLocked) return;
-                        const rating = Number(goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3);
-                        updateGoalRating(goal.id, { selfRating: rating, achievementText: e.target.value });
+                        updateGoalRating(goal.id, { achievementText: e.target.value });
                       }}
                       placeholder="Example: Both papers now published. Paper 1 accepted in November, Paper 2 accepted in January."
                     />
                   </div>
                 </div>
 
-                <div className="annual-rating-control">
-                  <label htmlFor={`goal-rating-${goal.id}`}>Rating</label>
-                  <select
-                    id={`goal-rating-${goal.id}`}
-                    className="annual-rating-select"
-                    disabled={isSelfAppraisalLocked}
-                    value={goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3}
-                    onChange={(e) => {
-                      if (isSelfAppraisalLocked) return;
-                      const rating = Number(e.target.value);
-                      setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: rating }));
-                      updateGoalRating(goal.id, {
-                        selfRating: rating,
-                        achievementText: achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? ""
-                      });
-                    }}
-                  >
-                    <option value={1}>1 - Poor</option>
-                    <option value={2}>2 - Below Avg</option>
-                    <option value={3}>3 - Average</option>
-                    <option value={4}>4 - Good</option>
-                    <option value={5}>5 - Excellent</option>
-                  </select>
-                </div>
               </div>
             ))}
           </div>
+
+          {!isSelfAppraisalLocked && allFinalAchievementsFilled && !isAnnualGoalsSubmitted && (
+            <div className="action-row" style={{ marginTop: "20px" }}>
+              <button className="btn" type="button" onClick={submitAnnualGoals}>
+                Submit Annual Goals
+              </button>
+            </div>
+          )}
+
+          {!isSelfAppraisalLocked && !allFinalAchievementsFilled && appraisalGoals.length > 0 && (
+            <div className="muted" style={{ marginTop: "16px" }}>
+              Fill every final achievement to enable submission.
+            </div>
+          )}
         </div>
       )}
 
-      {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
+      {activeRole === ROLES.EMPLOYEE && isAnnualPeriodActive && (
         <div className="card">
           <div className="card-header">
             <h2>Self Appraisal</h2>
@@ -319,10 +445,13 @@ const Reviews = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" disabled={isSelfAppraisalLocked} onClick={submitSelfSummary}>
+              <button className="btn" type="button" disabled={isSelfAppraisalLocked || !allFinalAchievementsFilled} onClick={submitSelfSummary}>
                 {isSelfAppraisalLocked ? "Submitted" : "Submit Summary"}
               </button>
             </div>
+            {!allFinalAchievementsFilled && !isSelfAppraisalLocked && (
+              <div className="muted">Fill every final achievement before submitting the self-summary.</div>
+            )}
           </div>
         </div>
       )}
@@ -330,7 +459,10 @@ const Reviews = () => {
       <div className="card">
         <div className="card-header">
           <h2>Review Workflow</h2>
-          <span className="muted">{reviews.length} record{reviews.length !== 1 ? "s" : ""}</span>
+          <span className="muted">
+            {visibleReviews.length} record{visibleReviews.length !== 1 ? "s" : ""}
+            {selectedEmployeeId && ` for ${selectedEmployeeName || "selected employee"}`}
+          </span>
         </div>
         <table className="table">
           <thead>
@@ -343,8 +475,8 @@ const Reviews = () => {
             </tr>
           </thead>
           <tbody>
-            {reviews.length === 0 && <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>}
-            {reviews.map((review) => (
+            {visibleReviews.length === 0 && <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>}
+            {visibleReviews.map((review) => (
               <tr
                 key={review.id}
                 ref={(node) => {
@@ -361,49 +493,129 @@ const Reviews = () => {
                 <td><StatusBadge status={review.status} /></td>
                 <td>{review.finalScore ? Number(review.finalScore).toFixed(2) : "-"}</td>
                 <td>
-                  {user?.role === ROLES.REPORTING_OFFICER && (
-                    <div className="inline-form">
-                      <input
-                        type="number"
-                        min={1}
-                        max={5}
-                        placeholder="Score (1-5)"
-                        value={ratingInputs[review.id]?.score || ""}
-                        onChange={(e) => setRatingInputs((prev) => ({ ...prev, [review.id]: { ...prev[review.id], score: e.target.value } }))}
-                      />
-                      <input
-                        placeholder="Remarks"
-                        value={ratingInputs[review.id]?.remarks || ""}
-                        onChange={(e) => setRatingInputs((prev) => ({ ...prev, [review.id]: { ...prev[review.id], remarks: e.target.value } }))}
-                      />
-                      <button className="btn" type="button" onClick={() => submitRating(review.id)}>Submit</button>
-                    </div>
-                  )}
-                  {user?.role === ROLES.REVIEWING_OFFICER && (
-                    <div className="inline-form-short">
-                      <input
-                        placeholder="Remarks"
-                        value={remarkInputs[review.id] || ""}
-                        onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
-                      />
-                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/review-approve")}>Approve</button>
-                    </div>
-                  )}
-                  {user?.role === ROLES.ACCEPTING_OFFICER && (
-                    <div className="inline-form-short">
-                      <input
-                        placeholder="Final remarks"
-                        value={remarkInputs[review.id] || ""}
-                        onChange={(e) => setRemarkInputs((prev) => ({ ...prev, [review.id]: e.target.value }))}
-                      />
-                      <button className="btn" type="button" onClick={() => submitRemarks(review.id, "/reviews/accept")}>Finalize</button>
-                    </div>
+                  {(activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER || activeRole === ROLES.ACCEPTING_OFFICER) && (
+                    <button className="btn" type="button" onClick={() => openReview(review)}>
+                      {selectedReview?.id === review.id ? "Review Open" : "Open Review"}
+                    </button>
                   )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {selectedEmployeeId && visibleReviews.length === 0 && (
+          <div className="muted" style={{ marginTop: "10px" }}>
+            No year-end appraisal record found yet for {selectedEmployeeName || "this employee"}.
+          </div>
+        )}
+        {selectedReview && (
+          <div className="card" style={{ marginTop: "20px" }}>
+            <div className="card-header">
+              <h2>{selectedReviewStage?.label || "Goal Review"}</h2>
+              <span className="muted">
+                {selectedReview.employee?.name || "Employee"} · {selectedReview.cycle?.name || selectedReview.cycle?.year || "-"}
+              </span>
+            </div>
+            {selectedReviewLoading ? (
+              <div className="muted">Loading goal details...</div>
+            ) : (
+              <>
+                <div className="card" style={{ marginBottom: "12px" }}>
+                  <div className="card-header">
+                    <h3>Employee Self-Appraisal Summary</h3>
+                  </div>
+                  <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                    {String(selectedReview.selfSummary || "").trim() || "No self-appraisal summary submitted."}
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Goal</th>
+                        <th>Original Goal</th>
+                        <th>Six-Month Progress</th>
+                        <th>Actual Achievement</th>
+                        <th>Rating</th>
+                        <th>Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedReviewGoals.length === 0 && (
+                        <tr><td colSpan={6} className="table-empty">No goals found for this appraisal.</td></tr>
+                      )}
+                      {selectedReviewGoals.map((goal, index) => {
+                        const current = selectedReviewInputs[goal.id] || {};
+                        const canEdit = Boolean(selectedReviewStage && selectedReview?.canEdit);
+                        const stageRatingKey = selectedReviewStage?.ratingKey;
+                        const stageRemarksKey = selectedReviewStage?.remarksKey;
+                        const ratingValue = current.rating ?? goal[stageRatingKey] ?? "";
+                        const remarksValue = current.remarks ?? goal[stageRemarksKey] ?? "";
+                        const sixMonthText = goal.sixMonthProgressText ?? goal.six_month_progress_text ?? "";
+                        const achievementText = goal.achievementText ?? goal.achievement_text ?? "";
+                        return (
+                          <tr key={goal.id}>
+                            <td>
+                              <strong>Goal {index + 1}</strong>
+                              <div className="muted small">{goal.goalTitle}</div>
+                            </td>
+                            <td>{goal.goalDescription || "-"}</td>
+                            <td>{sixMonthText || "No six-month progress note submitted."}</td>
+                            <td>{achievementText || "No actual achievement submitted."}</td>
+                            <td>
+                              {canEdit ? (
+                                <select
+                                  value={ratingValue}
+                                  onChange={(e) => setSelectedReviewInputs((prev) => ({
+                                    ...prev,
+                                    [goal.id]: { ...prev[goal.id], rating: e.target.value, remarks: prev[goal.id]?.remarks ?? remarksValue }
+                                  }))}
+                                >
+                                  <option value="">Select</option>
+                                  {[1, 2, 3, 4, 5].map((value) => (
+                                    <option key={value} value={value}>{value}</option>
+                                  ))}
+                                </select>
+                              ) : (
+                                ratingValue || "-"
+                              )}
+                            </td>
+                            <td>
+                              {canEdit ? (
+                                <textarea
+                                  rows={3}
+                                  value={remarksValue}
+                                  onChange={(e) => setSelectedReviewInputs((prev) => ({
+                                    ...prev,
+                                    [goal.id]: { ...prev[goal.id], rating: prev[goal.id]?.rating ?? ratingValue, remarks: e.target.value }
+                                  }))}
+                                />
+                              ) : (
+                                remarksValue || "-"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {selectedReviewStage && selectedReview?.canEdit && (
+                  <div className="action-row" style={{ marginTop: "16px" }}>
+                    <button className="btn" type="button" disabled={!selectedReviewComplete} onClick={submitSelectedReview}>
+                      Submit to Next Officer
+                    </button>
+                  </div>
+                )}
+                {selectedReviewStage && selectedReview?.canEdit && !selectedReviewComplete && (
+                  <div className="muted" style={{ marginTop: "10px" }}>
+                    Fill a rating and remarks for every goal before submitting.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
         {error && <div className="error-text" style={{ padding: "12px 0" }}>{error}</div>}
       </div>
     </div>

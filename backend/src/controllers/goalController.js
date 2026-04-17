@@ -365,7 +365,8 @@ const listGoalsForRO = async (req, res, next) => {
   try {
     const selectedEmployeeId = req.query?.employeeId ? String(req.query.employeeId) : null;
     const params = [req.user.id];
-    let whereClause = "WHERE p.reporting_officer_id = $1 AND g.status = 'submitted'";
+    // Default RO board should show all actionable team goals, not only submitted.
+    let whereClause = "WHERE p.reporting_officer_id = $1 AND g.status <> 'draft'";
 
     if (selectedEmployeeId) {
       params.push(selectedEmployeeId);

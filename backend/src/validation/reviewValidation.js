@@ -26,4 +26,13 @@ const remarkValidation = [
   body("remarks").trim().notEmpty().withMessage("Remarks are required")
 ];
 
-export { selfSummaryValidation, roRatingValidation, remarkValidation };
+const goalStageSubmissionValidation = [
+  body("appraisalId").isUUID().withMessage("Valid appraisalId is required"),
+  body("goalRatings").isArray({ min: 1 }).withMessage("Goal ratings are required"),
+  body("goalRatings.*.goalId").isUUID().withMessage("Each goalId must be valid"),
+  body("goalRatings.*.rating").optional().isInt({ min: 1, max: 5 }).withMessage("Each rating must be 1-5"),
+  body("goalRatings.*.score").optional().isInt({ min: 1, max: 5 }).withMessage("Each score must be 1-5"),
+  body("goalRatings.*.remarks").optional().trim().notEmpty().withMessage("Remarks are required")
+];
+
+export { selfSummaryValidation, roRatingValidation, remarkValidation, goalStageSubmissionValidation };

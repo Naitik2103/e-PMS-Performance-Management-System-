@@ -104,6 +104,11 @@ const Goals = () => {
     return goals.some((g) => ["draft", "returned"].includes(g.status));
   }, [goals]);
 
+  const shouldShowGoalForm =
+    activeRole === ROLES.EMPLOYEE &&
+    isGoalPeriodActive &&
+    (goals.length === 0 || hasUnsubmittedGoals);
+
   const groupedGoals = useMemo(() => {
     const groups = [];
     const groupsByEmployee = new Map();
@@ -224,7 +229,7 @@ const Goals = () => {
         </div>
       )}
 
-      {activeRole === ROLES.EMPLOYEE && isGoalPeriodActive && (
+      {shouldShowGoalForm && (
         <div className="card">
           <div className="card-header">
             <h2>{editingId ? "Edit Goal" : "Create Goal"}</h2>

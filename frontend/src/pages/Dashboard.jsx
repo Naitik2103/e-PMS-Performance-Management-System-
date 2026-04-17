@@ -136,19 +136,21 @@ const Dashboard = () => {
     [ROLES.REVIEWING_OFFICER]: "Employees to Review",
     [ROLES.ACCEPTING_OFFICER]: "Employees to Accept",
   };
-  const canOpenEmployeeGoals = [
+  const canOpenEmployeeReviews = [
     ROLES.REPORTING_OFFICER,
     ROLES.REVIEWING_OFFICER,
     ROLES.ACCEPTING_OFFICER,
   ].includes(activeRole);
 
-  const openEmployeeGoals = (emp) => {
-    if (!emp?.employeeId || !canOpenEmployeeGoals) return;
+  const openEmployeeReview = (emp) => {
+    if (!emp?.employeeId || !canOpenEmployeeReviews) return;
+    const cycleId = activeCycle?.cycleId || activeCycle?.id || "";
     const params = new URLSearchParams({
       employeeId: String(emp.employeeId),
       employeeName: String(emp.employeeName || ""),
+      ...(cycleId ? { cycleId: String(cycleId) } : {}),
     });
-    navigate(`/goals?${params.toString()}`);
+    navigate(`/reviews?${params.toString()}`);
   };
 
   const statCards = [
@@ -317,16 +319,16 @@ const Dashboard = () => {
                   <div
                     key={emp.employeeId}
                     className="assignment-employee-item"
-                    onClick={() => openEmployeeGoals(emp)}
+                    onClick={() => openEmployeeReview(emp)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        openEmployeeGoals(emp);
+                        openEmployeeReview(emp);
                       }
                     }}
-                    role={canOpenEmployeeGoals ? "button" : undefined}
-                    tabIndex={canOpenEmployeeGoals ? 0 : undefined}
-                    style={canOpenEmployeeGoals ? { cursor: "pointer" } : undefined}
+                    role={canOpenEmployeeReviews ? "button" : undefined}
+                    tabIndex={canOpenEmployeeReviews ? 0 : undefined}
+                    style={canOpenEmployeeReviews ? { cursor: "pointer" } : undefined}
                   >
                     <div className="assignment-employee-avatar">{String(emp.employeeName || "?").trim().charAt(0).toUpperCase()}</div>
                     <div className="assignment-employee-meta">

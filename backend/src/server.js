@@ -1,9 +1,37 @@
 
+import http from "http";
 import app from "./app.js";
 import pool from "./config/db.js";
 import { ensureAdminSchema } from "./db/ensureAdminSchema.js";
 
-const PORT = process.env.PORT || 5000;
+const BASE_PORT = Number(process.env.PORT || 5000);
+
+const startHttpServer = (preferredPort) => {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(app);
+    let activePort = preferredPort;
+
+    const tryListen = (port) => {
+      activePort = port;
+      server.listen(port);
+    };
+
+    server.on("listening", () => {
+      resolve({ server, port: activePort });
+    });
+
+    server.on("error", (error) => {
+      if (error.code === "EADDRINUSE" && activePort < preferredPort + 10) {
+        console.warn(`Port ${activePort} is busy. Retrying on ${activePort + 1}...`);
+        tryListen(activePort + 1);
+        return;
+      }
+      reject(error);
+    });
+
+    tryListen(preferredPort);
+  });
+};
 
 (async () => {
   try {
@@ -71,9 +99,8 @@ const PORT = process.env.PORT || 5000;
 
     console.log("Database connected");
 
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
+    const { port } = await startHttpServer(BASE_PORT);
+    console.log(`Server running on port ${port}`);
   } catch (error) {
     console.error("Failed to connect to Postgres", error);
     process.exit(1);

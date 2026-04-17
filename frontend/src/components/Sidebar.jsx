@@ -7,13 +7,57 @@ import { sidebarItems, adminNavItems } from "../rbac/accessMap";
 import { apiClient } from "../api/client";
 
 const Sidebar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, activeCycle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const role = user?.selectedRole || user?.role;
   const [accessWindow, setAccessWindow] = useState(null);
-  const sixMonthState = accessWindow?.sixMonthState || null;
-  const annualState = accessWindow?.annualState || null;
+
+  const getDateOnly = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  };
+
+  const getWindowState = (startDate, endDate) => {
+    const start = getDateOnly(startDate);
+    const end = getDateOnly(endDate);
+    if (!start || !end) return null;
+    const now = getDateOnly(new Date());
+    if (now < start) return "not_started";
+    if (now > end) return "closed";
+    return "open";
+  };
+
+  const resolveWindowState = (flag, startDate, endDate) => {
+    if (typeof flag === "boolean") {
+      if (flag) return "open";
+      const byDate = getWindowState(startDate, endDate);
+      return byDate || "closed";
+    }
+    return getWindowState(startDate, endDate);
+  };
+
+  const officerGoalState = resolveWindowState(
+    activeCycle?.isGoalSettingActive,
+    activeCycle?.goalSettingStart,
+    activeCycle?.goalSettingEnd
+  );
+  const officerSixMonthState = resolveWindowState(
+    activeCycle?.isSixMonthReviewActive,
+    activeCycle?.sixMonthProgressReviewStart,
+    activeCycle?.sixMonthProgressReviewEnd
+  );
+  const officerAnnualState = resolveWindowState(
+    activeCycle?.isAnnualAppraisalActive,
+    activeCycle?.annualAppraisalStart,
+    activeCycle?.annualAppraisalEnd
+  );
+
+  const goalState = role === ROLES.EMPLOYEE ? "open" : officerGoalState;
+  const sixMonthState = role === ROLES.EMPLOYEE ? (accessWindow?.sixMonthState || null) : officerSixMonthState;
+  const annualState = role === ROLES.EMPLOYEE ? (accessWindow?.annualState || null) : officerAnnualState;
 
   useEffect(() => {
     let alive = true;
@@ -79,13 +123,56 @@ const Sidebar = () => {
     sidebarItems
       .filter((item) => !role || item.roles.includes(role))
       .filter((item) => {
-        if (role !== ROLES.EMPLOYEE) return true;
-        // Keep Tracking/Reviews visible (disabled if outside their access window).
+        // Keep all items visible for eligible roles; apply period gating via disabled state.
         return true;
       })
       .map((item) => {
         const to = typeof item.to === "function" ? item.to(role) : item.to;
+        const target = item.key === "goals" ? { pathname: to, search: "" } : to;
         const Icon = item.icon;
+
+        const periodStateByKey = {
+          goals: goalState,
+          tracking: sixMonthState,
+          reviews: annualState
+        };
+        const state = periodStateByKey[item.key] || "open";
+        const shouldGateGoal = item.key === "goals" && [ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER].includes(role);
+        const shouldGateTracking = item.key === "tracking" && [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER].includes(role);
+        const shouldGateReviews = item.key === "reviews" && [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER].includes(role);
+        const shouldGate = shouldGateGoal || shouldGateTracking || shouldGateReviews;
+
+        const labelByKey = {
+          goals: "Goal setting period",
+          tracking: "Six-month progress period",
+          reviews: "Annual appraisal period"
+        };
+
+        if (shouldGate && state !== "open") {
+          const label = labelByKey[item.key] || "Access period";
+          const msg =
+            state === "not_started"
+              ? `${label} has not started yet.`
+              : state === "closed"
+                ? `${label} is closed.`
+                : `${label} is not available.`;
+          return (
+            <div
+              key={item.key}
+              className="sidebar-link"
+              style={{ opacity: 0.6, pointerEvents: "none" }}
+              title={msg}
+            >
+              <Icon size={18} className="sidebar-icon" />
+              <div>
+                <span>{item.label}</span>
+                <div style={{ fontSize: 12, color: "#8a8a8a", marginTop: 2 }}>{msg}</div>
+              </div>
+              <ChevronRight size={14} className="sidebar-chevron" />
+            </div>
+          );
+        }
+
         if (role === ROLES.EMPLOYEE && item.key === "tracking" && sixMonthState !== "open") {
           const msg =
             sixMonthState === "not_started"
@@ -133,7 +220,7 @@ const Sidebar = () => {
           );
         }
         return (
-          <NavLink key={item.key} to={to} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
+          <NavLink key={item.key} to={target} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
             <Icon size={18} className="sidebar-icon" />
             <span>{item.label}</span>
             <ChevronRight size={14} className="sidebar-chevron" />
