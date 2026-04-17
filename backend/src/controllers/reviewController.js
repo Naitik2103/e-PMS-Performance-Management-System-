@@ -85,7 +85,7 @@ const getActiveOrByYearCycle = async (cycleId, year) => {
       "SELECT * FROM appraisal_cycles WHERE cycle_year = $1 ORDER BY created_at DESC LIMIT 1",
       [String(year)]
     );
-    return r.rows[0] || null;
+    if (r.rows[0]) return r.rows[0];
   }
   const r = await pool.query(
     "SELECT * FROM appraisal_cycles WHERE status = 'active' ORDER BY activated_at DESC NULLS LAST, created_at DESC LIMIT 1"
@@ -200,10 +200,10 @@ const submitSelfSummary = async (req, res, next) => {
     const dbAppraisal = appRes.rows[0];
     if (!dbAppraisal) return res.status(404).json({ error: "Appraisal not found" });
     if (dbAppraisal.employee_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
-    if (["revo_rated", "ao_accepted", "completed"].includes(dbAppraisal.status)) {
+    if (["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes(dbAppraisal.status)) {
       return res.status(409).json({
-        error: "Action not allowed in current appraisal state",
-        required: "not finalized",
+        error: "Self-appraisal already submitted and locked",
+        required: "editable state",
         current: dbAppraisal.status
       });
     }
@@ -512,11 +512,16 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         g.goal_description,
         g.status,
         agr.self_rating,
-        agr.achievement_text
+        agr.achievement_text,
+        smr.progress_text AS six_month_progress_text
       FROM goals g
       LEFT JOIN appraisal_goal_ratings agr
         ON agr.goal_id = g.goal_id
        AND agr.appraisal_id = $1
+      LEFT JOIN six_month_review smr
+        ON smr.goal_id = g.goal_id
+       AND smr.employee_id = $2
+       AND smr.cycle_id = $3
       WHERE g.user_id = $2
         AND g.cycle_id = $3
       ORDER BY g.created_at ASC
@@ -533,7 +538,8 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         goalDescription: g.goal_description,
         status: g.status,
         selfRating: g.self_rating,
-        achievementText: g.achievement_text
+        achievementText: g.achievement_text,
+        sixMonthProgressText: g.six_month_progress_text
       }))
     });
   } catch (error) {
@@ -857,15 +863,18 @@ const getAppraisalGoalsWithRatings = async (req, res, next) => {
 
 const updateGoalRating = async (req, res, next) => {
   try {
-    const { appraisalId, goalId, selfRating } = req.body;
+    const { appraisalId, goalId, selfRating, achievementText } = req.body;
     await ensureReviewSchema();
 
     // Verify appraisal belongs to user
-    const appRes = await pool.query("SELECT id, employee_id, cycle_id FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+    const appRes = await pool.query("SELECT id, employee_id, cycle_id, status FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
     const appraisal = appRes.rows[0];
     if (!appraisal) return res.status(404).json({ error: "Appraisal not found" });
     if (appraisal.employee_id !== req.user.userId) {
       return res.status(403).json({ error: "You don't have access to this appraisal" });
+    }
+    if (["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes(appraisal.status)) {
+      return res.status(409).json({ error: "Self-appraisal already submitted and locked" });
     }
 
     // Verify goal belongs to user and cycle
@@ -876,16 +885,16 @@ const updateGoalRating = async (req, res, next) => {
     const id = crypto.randomUUID();
     await pool.query(
       `
-      INSERT INTO appraisal_goal_ratings (id, appraisal_id, goal_id, self_rating, updated_at)
-      VALUES ($1, $2, $3, $4, NOW())
+      INSERT INTO appraisal_goal_ratings (id, appraisal_id, goal_id, self_rating, achievement_text, updated_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
       ON CONFLICT (appraisal_id, goal_id)
-      DO UPDATE SET self_rating = EXCLUDED.self_rating, updated_at = NOW()
+      DO UPDATE SET self_rating = EXCLUDED.self_rating, achievement_text = EXCLUDED.achievement_text, updated_at = NOW()
       `,
-      [id, appraisalId, goalId, Number(selfRating || 3)]
+      [id, appraisalId, goalId, Number(selfRating || 3), String(achievementText || "")]
     );
 
     await writeAudit({ user: req.user, action: "update", entity: "goal_rating", entityId: `${appraisalId}-${goalId}` });
-    return res.json({ success: true, selfRating: Number(selfRating || 3) });
+    return res.json({ success: true, selfRating: Number(selfRating || 3), achievementText: String(achievementText || "") });
   } catch (error) {
     return next(error);
   }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -19,8 +19,35 @@ const Reviews = () => {
   const [appraisalGoals, setAppraisalGoals] = useState([]);
   const [currentAppraisalId, setCurrentAppraisalId] = useState("");
   const [goalRatings, setGoalRatings] = useState({});
+  const [achievementInputs, setAchievementInputs] = useState({});
   const reviewRowRefs = useRef(new Map());
   const activeCycleId = activeCycle?.cycleId || activeCycle?.id || "";
+
+  const currentReview = useMemo(() => {
+    if (!Array.isArray(reviews) || reviews.length === 0) return null;
+    return (
+      reviews.find((r) => String(r.id) === String(currentAppraisalId)) ||
+      reviews.find((r) => activeCycleId && String(r.cycle_id || r.cycleId) === String(activeCycleId)) ||
+      null
+    );
+  }, [reviews, currentAppraisalId, activeCycleId]);
+
+  const isSelfAppraisalLocked = useMemo(
+    () => ["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes(currentReview?.status),
+    [currentReview?.status]
+  );
+
+  const annualRatingStats = useMemo(() => {
+    if (appraisalGoals.length === 0) {
+      return { total: 0, average: 0 };
+    }
+    const total = appraisalGoals.length;
+    const sum = appraisalGoals.reduce((acc, goal) => {
+      const selected = goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3;
+      return acc + Number(selected);
+    }, 0);
+    return { total, average: sum / total };
+  }, [appraisalGoals, goalRatings, currentAppraisalId]);
 
   useEffect(() => {
     setIsAnnualPeriodActive(isAnnualAppraisalPeriodActive(activeCycle));
@@ -49,23 +76,32 @@ const Reviews = () => {
       const response = await apiClient.get(`/reviews/my-goals?${params.toString()}`);
       setCurrentAppraisalId(response.data?.appraisalId || "");
       setAppraisalGoals(response.data?.goals || []);
+      const achievementMap = (response.data?.goals || []).reduce((acc, goal) => {
+        acc[`${response.data?.appraisalId || ""}-${goal.id}`] = goal.achievementText || "";
+        return acc;
+      }, {});
+      setAchievementInputs(achievementMap);
     } catch (err) {
       console.error("Failed to load goals:", err);
       setAppraisalGoals([]);
       setCurrentAppraisalId("");
+      setAchievementInputs({});
     }
   };
 
-  const updateGoalRating = async (goalId, rating) => {
+  const updateGoalRating = async (goalId, payload) => {
     if (!currentAppraisalId) {
       setError("Unable to save rating right now. Reload the page once.");
       return;
     }
     try {
-      await apiClient.post("/reviews/goal-rating", { appraisalId: currentAppraisalId, goalId, selfRating: rating });
-      setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: rating }));
+      const selfRating = Number(payload?.selfRating ?? 3);
+      const achievementText = String(payload?.achievementText || "");
+      await apiClient.post("/reviews/goal-rating", { appraisalId: currentAppraisalId, goalId, selfRating, achievementText });
+      setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: selfRating }));
+      setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: achievementText }));
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to update goal rating");
+      setError(err.response?.data?.error || err.response?.data?.message || "Failed to update goal rating");
     }
   };
 
@@ -100,12 +136,15 @@ const Reviews = () => {
   const submitSelfSummary = async () => {
     setError("");
     try {
-      await apiClient.post("/reviews/self-summary", selfForm);
+      await apiClient.post("/reviews/self-summary", {
+        ...selfForm,
+        cycleId: activeCycleId || undefined
+      });
       setSelfForm({ year: new Date().getFullYear(), selfSummary: "" });
       loadReviews();
       loadYearEndGoals();
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to submit summary");
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to submit summary");
     }
   };
 
@@ -154,6 +193,104 @@ const Reviews = () => {
       )}
 
       {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
+        <div className="card annual-rating-card">
+          <div className="card-header">
+            <h2>Annual Goals Rating</h2>
+            <span className="muted">Original goal, six-month note, final achievement, and self-rating (1-5)</span>
+          </div>
+          {isSelfAppraisalLocked && (
+            <div className="annual-rating-lock-note">
+              Self-appraisal already submitted. Annual goal ratings are now locked.
+            </div>
+          )}
+          <div className="annual-rating-summary">
+            <div className="annual-rating-chip">
+              <span className="annual-rating-chip-label">Goals</span>
+              <strong>{annualRatingStats.total}</strong>
+            </div>
+            <div className="annual-rating-chip">
+              <span className="annual-rating-chip-label">Average</span>
+              <strong>{annualRatingStats.average.toFixed(2)} / 5</strong>
+            </div>
+          </div>
+
+          <div className="annual-rating-list" role="list">
+            {appraisalGoals.length === 0 && (
+              <div className="annual-rating-empty">No goals found for this cycle.</div>
+            )}
+
+            {appraisalGoals.map((goal, index) => (
+              <div className="annual-rating-item" role="listitem" key={`${currentAppraisalId || "goal"}-${goal.id}`}>
+                <div className="annual-rating-main">
+                  <div className="annual-rating-goal-line">
+                    <span className="annual-rating-index">Goal {index + 1}</span>
+                    <h3 className="annual-rating-goal-title">{goal.goalTitle}</h3>
+                  </div>
+                  <div className="annual-rating-ref-block">
+                    <div className="annual-rating-ref-title">Original Goal (set in goal-setting period)</div>
+                    <p className="annual-rating-goal-kpi">{goal.goalDescription || "No KPI description provided."}</p>
+                  </div>
+
+                  <div className="annual-rating-ref-block">
+                    <div className="annual-rating-ref-title">Six-Month Progress (read-only reference)</div>
+                    <p className="annual-rating-progress-note">{goal.sixMonthProgressText || "No six-month progress note submitted."}</p>
+                  </div>
+
+                  <div className="annual-rating-ref-block">
+                    <label className="annual-rating-ref-title" htmlFor={`goal-achievement-${goal.id}`}>
+                      Final Achievement
+                    </label>
+                    <textarea
+                      id={`goal-achievement-${goal.id}`}
+                      rows={3}
+                      className="annual-rating-achievement"
+                      value={achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? ""}
+                      disabled={isSelfAppraisalLocked}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: value }));
+                      }}
+                      onBlur={(e) => {
+                        if (isSelfAppraisalLocked) return;
+                        const rating = Number(goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3);
+                        updateGoalRating(goal.id, { selfRating: rating, achievementText: e.target.value });
+                      }}
+                      placeholder="Example: Both papers now published. Paper 1 accepted in November, Paper 2 accepted in January."
+                    />
+                  </div>
+                </div>
+
+                <div className="annual-rating-control">
+                  <label htmlFor={`goal-rating-${goal.id}`}>Rating</label>
+                  <select
+                    id={`goal-rating-${goal.id}`}
+                    className="annual-rating-select"
+                    disabled={isSelfAppraisalLocked}
+                    value={goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3}
+                    onChange={(e) => {
+                      if (isSelfAppraisalLocked) return;
+                      const rating = Number(e.target.value);
+                      setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: rating }));
+                      updateGoalRating(goal.id, {
+                        selfRating: rating,
+                        achievementText: achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? ""
+                      });
+                    }}
+                  >
+                    <option value={1}>1 - Poor</option>
+                    <option value={2}>2 - Below Avg</option>
+                    <option value={3}>3 - Average</option>
+                    <option value={4}>4 - Good</option>
+                    <option value={5}>5 - Excellent</option>
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
         <div className="card">
           <div className="card-header">
             <h2>Self Appraisal</h2>
@@ -166,6 +303,7 @@ const Reviews = () => {
                 <input
                   type="number"
                   value={selfForm.year}
+                  disabled={isSelfAppraisalLocked}
                   onChange={(e) => setSelfForm({ ...selfForm, year: Number(e.target.value) })}
                 />
               </div>
@@ -175,64 +313,17 @@ const Reviews = () => {
               <textarea
                 rows={5}
                 value={selfForm.selfSummary}
+                disabled={isSelfAppraisalLocked}
                 onChange={(e) => setSelfForm({ ...selfForm, selfSummary: e.target.value })}
               />
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" onClick={submitSelfSummary}>
-                Submit Summary
+              <button className="btn" type="button" disabled={isSelfAppraisalLocked} onClick={submitSelfSummary}>
+                {isSelfAppraisalLocked ? "Submitted" : "Submit Summary"}
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {user?.role === ROLES.EMPLOYEE && isAnnualPeriodActive && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Annual Goals Rating</h2>
-            <span className="muted">Rate your achievement for each goal (1-5)</span>
-          </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Goal</th>
-                <th>KPI (Description)</th>
-                <th style={{ width: 120 }}>Goal Rating</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appraisalGoals.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="table-empty">No goals found for this cycle.</td>
-                </tr>
-              )}
-              {appraisalGoals.map((goal) => (
-                  <tr key={`${currentAppraisalId || "goal"}-${goal.id}`}>
-                    <td>{goal.goalTitle}</td>
-                    <td style={{ fontSize: "13px", color: "#666" }}>{goal.goalDescription || "-"}</td>
-                    <td>
-                      <select
-                        value={goalRatings[`${currentAppraisalId}-${goal.id}`] ?? goal.selfRating ?? 3}
-                        onChange={(e) => {
-                          const rating = Number(e.target.value);
-                          setGoalRatings((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: rating }));
-                          updateGoalRating(goal.id, rating);
-                        }}
-                        style={{ maxWidth: 100 }}
-                      >
-                        <option value={1}>1 - Poor</option>
-                        <option value={2}>2 - Below Avg</option>
-                        <option value={3}>3 - Average</option>
-                        <option value={4}>4 - Good</option>
-                        <option value={5}>5 - Excellent</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
         </div>
       )}
 

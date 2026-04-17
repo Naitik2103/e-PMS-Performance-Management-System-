@@ -874,6 +874,157 @@
   color: var(--grey-600);
 }
 
+.annual-rating-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.annual-rating-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.annual-rating-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #eff5ff;
+  color: #1f3e76;
+  border: 1px solid #dbe9ff;
+  border-radius: var(--radius-full);
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.annual-rating-chip-label {
+  color: #4b6695;
+  font-weight: 600;
+}
+
+.annual-rating-lock-note {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #bcd5ff;
+  background: #eef5ff;
+  color: #1d4f9c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.annual-rating-list {
+  display: grid;
+  gap: 12px;
+}
+
+.annual-rating-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 14px;
+  align-items: start;
+  border: 1px solid #dfe7f4;
+  border-radius: 10px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.annual-rating-main {
+  min-width: 0;
+}
+
+.annual-rating-goal-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.annual-rating-index {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  background: #f0f4fb;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.annual-rating-goal-title {
+  margin: 0;
+  font-size: 15px;
+  color: #16233f;
+  line-height: 1.4;
+}
+
+.annual-rating-goal-kpi {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #52607a;
+}
+
+.annual-rating-ref-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e7edf7;
+  background: #fbfdff;
+}
+
+.annual-rating-ref-title {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.annual-rating-progress-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.annual-rating-achievement {
+  min-height: 86px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.annual-rating-control {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.annual-rating-control label {
+  font-size: 12px;
+  margin: 0;
+  color: #516281;
+}
+
+.annual-rating-select {
+  font-weight: 600;
+}
+
+.annual-rating-empty {
+  text-align: center;
+  padding: 28px 14px;
+  border: 1px dashed #d0d9e8;
+  border-radius: 10px;
+  color: var(--grey-600);
+  background: #f8fbff;
+}
+
 /* ─────────────────────────────────────────────────────────────
    INLINE FORMS
 ───────────────────────────────────────────────────────────── */
@@ -1714,6 +1865,14 @@
   .topbar-notif-panel {
     width: min(92vw, 340px);
     right: 0;
+  }
+
+  .annual-rating-item {
+    grid-template-columns: 1fr;
+  }
+
+  .annual-rating-control {
+    max-width: 220px;
   }
 }
 
