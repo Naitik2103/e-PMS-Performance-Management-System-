@@ -1,7 +1,7 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Bell, ChevronDown, Check } from "lucide-react";
+import { Bell, ChevronDown, Check, Menu } from "lucide-react";
 import { apiClient } from "../api/client";
 import { roleLabel } from "../constants/rbac";
 
@@ -25,7 +25,7 @@ const pageTitles = {
   "/reviews": "Year-End Reviews",
 };
 
-const Topbar = () => {
+const Topbar = ({ onToggleSidebar }) => {
   const { user, switchRole } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -135,6 +135,9 @@ const Topbar = () => {
   return (
     <header className="topbar">
       <div className="topbar-left">
+        <button className="topbar-menu-btn" type="button" aria-label="Toggle navigation" onClick={onToggleSidebar}>
+          <Menu size={18} />
+        </button>
         <h1 className="topbar-title">{title}</h1>
         <p className="topbar-date">{today}</p>
       </div>

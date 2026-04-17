@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Menu, X } from "lucide-react";
 import { ROLES } from "../constants/rbac";
 
 const roleHomeMap = {
@@ -20,7 +21,7 @@ const features = [
   {
     icon: "📊",
     title: "Six-Month Tracking",
-    desc: "Record employee progress at H1 and H2 checkpoints with detailed per-KPA progress updates.",
+    desc: "Record employee progress in the six-month review with detailed per-KPA progress updates.",
   },
   {
     icon: "🏆",
@@ -37,14 +38,32 @@ const features = [
 const steps = [
   { num: "01", label: "Set Annual Goals", sub: "Employee sets KPAs" },
   { num: "02", label: "Manager Approval", sub: "RO & RevO approve" },
-  { num: "03", label: "Track Progress", sub: "H1 & H2 updates" },
+  { num: "03", label: "Track Progress", sub: "Six-month review updates" },
   { num: "04", label: "Year-End Review", sub: "Self-summary & rating" },
   { num: "05", label: "Final Acceptance", sub: "Accepting Officer signs off" },
 ];
 
+const supportEmail = "epmshandler@gmail.com";
+
 const HomePage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 769) setMenuOpen(false);
+    };
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const scrollToSection = (id) => {
+    const node = document.getElementById(id);
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
+    setMenuOpen(false);
+  };
 
   const handleCTA = () => {
     if (user) {
@@ -56,14 +75,19 @@ const HomePage = () => {
 
   return (
     <div className="home-page">
+      {menuOpen && <button className="home-mobile-backdrop" type="button" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
       {/* ── Header ── */}
       <header className="home-header">
         <div className="home-logo">
           <span className="logo-mark">e</span>-PMS
         </div>
-        <nav className="home-nav">
-          <span className="home-nav-link">Features</span>
-          <span className="home-nav-link">Workflow</span>
+        <button className="home-nav-toggle" type="button" aria-label="Toggle navigation" onClick={() => setMenuOpen((prev) => !prev)}>
+          {menuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+        <nav className={`home-nav${menuOpen ? " open" : ""}`} aria-label="Primary">
+          <button className="home-nav-link" type="button" onClick={() => scrollToSection("features")}>Features</button>
+          <button className="home-nav-link" type="button" onClick={() => scrollToSection("workflow")}>Workflow</button>
+          <button className="home-nav-link" type="button" onClick={() => scrollToSection("contact")}>Contact</button>
         </nav>
         <button className="btn home-signin-btn" onClick={handleCTA}>
           {user ? "Go to Dashboard" : "Sign In"}
@@ -73,21 +97,26 @@ const HomePage = () => {
       {/* ── Hero ── */}
       <section className="home-hero">
         <div className="hero-content">
-          <div className="hero-badge">Electronic Performance Management System</div>
+          <div className="hero-badge">Performance management platform</div>
           <h1 className="hero-title">
-            Manage Performance.<br />Drive Results.
+            Manage performance.<br />Align teams. Deliver results.
           </h1>
           <p className="hero-subtitle">
-            A structured digital platform for your organization to manage employee performance
-            from annual goal setting all the way through to year-end evaluation — with full
-            hierarchical review workflows.
+            A modern digital workspace for planning goals, tracking progress, and completing
+            year-end reviews with clear accountability across every role in the workflow.
           </p>
+          <div className="hero-mini-grid" aria-label="Platform highlights">
+            <div className="hero-mini-chip">Annual goal setting</div>
+            <div className="hero-mini-chip">Six-month review tracking</div>
+            <div className="hero-mini-chip">RO to AO workflow</div>
+            <div className="hero-mini-chip">Role-based access</div>
+          </div>
           <div className="hero-actions">
             <button className="btn hero-btn-primary" onClick={handleCTA}>
               {user ? "Go to Dashboard →" : "Get Started →"}
             </button>
             <div className="hero-note">
-              Secure role-based access · No installation required
+              Secure role-based access · Fast setup · No installation required
             </div>
           </div>
         </div>
@@ -100,21 +129,21 @@ const HomePage = () => {
               </div>
               <div className="hero-stat">
                 <span className="hero-stat-num">100</span>
-                <span className="hero-stat-label">KPA Marks Total</span>
+                <span className="hero-stat-label">Total KPA Weight</span>
               </div>
             </div>
             <div className="hero-stat-row">
               <div className="hero-stat">
-                <span className="hero-stat-num">H1 + H2</span>
-                <span className="hero-stat-label">Tracking Periods</span>
+                <span className="hero-stat-num">1</span>
+                <span className="hero-stat-label">Six-month review</span>
               </div>
               <div className="hero-stat">
                 <span className="hero-stat-num">360°</span>
-                <span className="hero-stat-label">Review Chain</span>
+                <span className="hero-stat-label">Review chain</span>
               </div>
             </div>
             <div className="hero-progress-demo">
-              <div className="demo-label">Sample KPA Weight Progress</div>
+              <div className="demo-label">Sample KPA weight progress</div>
               <div className="demo-bar-wrap">
                 <div className="demo-bar" style={{ width: "78%" }}></div>
               </div>
@@ -126,7 +155,7 @@ const HomePage = () => {
 
       {/* ── Features ── */}
       <section className="home-features" id="features">
-        <div className="section-label">What you get</div>
+        <div className="section-label">Platform capabilities</div>
         <h2 className="section-title">Everything you need for performance management</h2>
         <div className="features-grid">
           {features.map((f) => (
@@ -141,7 +170,7 @@ const HomePage = () => {
 
       {/* ── Workflow ── */}
       <section className="home-workflow" id="workflow">
-        <div className="section-label">Step by step</div>
+        <div className="section-label">Process flow</div>
         <h2 className="section-title">How the review process works</h2>
         <div className="workflow-row">
           {steps.map((step, i) => (
@@ -156,12 +185,19 @@ const HomePage = () => {
       </section>
 
       {/* ── CTA Banner ── */}
-      <section className="home-cta-banner">
-        <h2>Ready to get started?</h2>
-        <p>Sign in with your organizational credentials to access your performance dashboard.</p>
-        <button className="btn hero-btn-primary" onClick={handleCTA}>
-          {user ? "Go to Dashboard" : "Sign In Now"}
-        </button>
+      <section className="home-cta-banner" id="contact">
+        <div className="home-cta-card">
+          <div className="section-label section-label-light">Contact</div>
+          <h2>Ready to get started?</h2>
+          <p>
+            Reach out directly if you need help with access or system support.
+          </p>
+          <div className="home-contact-actions">
+            <a className="btn home-contact-email" href={`mailto:${supportEmail}`}>
+              {supportEmail}
+            </a>
+          </div>
+        </div>
       </section>
 
       {/* ── Footer ── */}

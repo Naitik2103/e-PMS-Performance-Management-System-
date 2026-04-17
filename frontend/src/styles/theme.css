@@ -42,6 +42,11 @@
   --radius-full: 999px;
 }
 
+/* Responsive baseline: fluid typography and no horizontal overflow */
+html {
+  font-size: clamp(14px, 0.3vw + 13px, 16px);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -49,6 +54,21 @@
 body {
   margin: 0;
   background: var(--grey-100);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* Media should never overflow viewport width */
+img,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
 }
 
 a {

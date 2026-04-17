@@ -105,9 +105,14 @@ textarea {
 
 .action-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 10px;
-  align-items: center;
+  align-items: stretch;
+}
+
+.action-row .btn {
+  width: 100%;
+  justify-content: center;
 }
 
 .error-text {
@@ -129,6 +134,19 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 20px;
+}
+
+/* Tablet and up: preserve inline action buttons */
+@media (min-width: 481px) {
+  .action-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .action-row .btn {
+    width: auto;
+  }
 }
 
 .kpa-list {

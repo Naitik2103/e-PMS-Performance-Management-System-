@@ -6,7 +6,7 @@ import { roleLabel, ROLES } from "../constants/rbac";
 import { sidebarItems, adminNavItems } from "../rbac/accessMap";
 import { apiClient } from "../api/client";
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen = false, onCloseMobile }) => {
   const { user, logout, activeCycle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,6 +84,10 @@ const Sidebar = () => {
     navigate("/");
   };
 
+  const handleNavNavigate = () => {
+    if (typeof onCloseMobile === "function") onCloseMobile();
+  };
+
   const initials = user?.name
     ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
@@ -99,6 +103,7 @@ const Sidebar = () => {
             key={item.key}
             to={item.path}
             end={item.path === "/admin/cycles"}
+            onClick={handleNavNavigate}
             className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
           >
             <Icon size={18} className="sidebar-icon" />
@@ -110,6 +115,7 @@ const Sidebar = () => {
       {cycleParticipantsMatch && (
         <NavLink
           to={location.pathname}
+          onClick={handleNavNavigate}
           className={({ isActive }) => `sidebar-link sidebar-link--sub${isActive ? " active" : ""}`}
         >
           <span className="sidebar-sub-bullet">└</span>
@@ -220,7 +226,7 @@ const Sidebar = () => {
           );
         }
         return (
-          <NavLink key={item.key} to={target} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
+          <NavLink key={item.key} to={target} onClick={handleNavNavigate} className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}>
             <Icon size={18} className="sidebar-icon" />
             <span>{item.label}</span>
             <ChevronRight size={14} className="sidebar-chevron" />
@@ -229,7 +235,7 @@ const Sidebar = () => {
       });
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isOpen ? " open" : ""}`}>
       <div className="sidebar-brand">
         <div className="sidebar-logo-mark">e</div>
         <span className="sidebar-logo-text">e-PMS</span>
