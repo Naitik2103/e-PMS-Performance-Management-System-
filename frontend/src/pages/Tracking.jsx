@@ -193,7 +193,7 @@ const Tracking = () => {
               <th>Goal</th>
               <th>Status</th>
               <th>Progress</th>
-              <th>Reporting Remarks</th>
+              <th>RO Remarks</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -216,7 +216,7 @@ const Tracking = () => {
                   </span>
                 </td>
                 <td>{record.progressText}</td>
-                <td>{record.reportingRemarks || <span className="muted">-</span>}</td>
+                <td>{record.roRemarks || record.reportingRemarks || <span className="muted">-</span>}</td>
                 <td>
                   {user?.role === ROLES.REPORTING_OFFICER && record.status === "submitted" && (
                     <div className="inline-form-short">

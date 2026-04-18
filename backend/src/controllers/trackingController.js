@@ -16,6 +16,7 @@ const formatTrackingRecord = (row) => ({
   status: row.status,
   submittedAt: row.submitted_at,
   reportingRemarks: row.reporting_remarks,
+  roRemarks: row.reporting_remarks,
   period: row.period,
   goalTitle: row.goal_title,
   weightage: row.weightage,
@@ -180,6 +181,7 @@ const submitTracking = async (req, res, next) => {
 const addRoRemarks = async (req, res, next) => {
   try {
     const { trackingId, reportingRemarks } = req.body;
+    const remarkText = String(reportingRemarks || "").trim();
 
     const trackingRes = await pool.query(
       "SELECT review_id, employee_id, cycle_id, appraisal_id FROM six_month_review WHERE review_id = $1 LIMIT 1",
@@ -206,7 +208,7 @@ const addRoRemarks = async (req, res, next) => {
       return next(new Error("Access denied for this tracking record"));
     }
 
-    await pool.query("UPDATE six_month_review SET reporting_remarks = $1 WHERE review_id = $2", [reportingRemarks, trackingId]);
+    await pool.query("UPDATE six_month_review SET reporting_remarks = $1 WHERE review_id = $2", [remarkText, trackingId]);
 
     await writeAudit({ user: req.user, action: "remark", entity: "six_month_review", entityId: trackingId });
     await notifyUser({
