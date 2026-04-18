@@ -422,6 +422,30 @@ const Reviews = () => {
                       </div>
                     </>
                   )}
+                  {goal.revoRating && (
+                    <>
+                      <div className="annual-rating-ref-block">
+                        <div className="annual-rating-ref-title">Reviewing Officer Rating</div>
+                        <p className="annual-rating-progress-note">{goal.revoRating} / 5</p>
+                      </div>
+                      <div className="annual-rating-ref-block">
+                        <div className="annual-rating-ref-title">Reviewing Officer Remarks</div>
+                        <p className="annual-rating-progress-note">{goal.revoRemarks || "No remarks provided."}</p>
+                      </div>
+                    </>
+                  )}
+                  {goal.aoRating && (
+                    <>
+                      <div className="annual-rating-ref-block">
+                        <div className="annual-rating-ref-title">Accepting Officer Rating</div>
+                        <p className="annual-rating-progress-note">{goal.aoRating} / 5</p>
+                      </div>
+                      <div className="annual-rating-ref-block">
+                        <div className="annual-rating-ref-title">Accepting Officer Remarks</div>
+                        <p className="annual-rating-progress-note">{goal.aoRemarks || "No remarks provided."}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
               </div>
@@ -566,8 +590,10 @@ const Reviews = () => {
                         <th>Actual Achievement</th>
                         <th>RO Rating</th>
                         <th>RO Remarks</th>
-                        <th>Action Rating</th>
-                        <th>Action Remarks</th>
+                        <th>Reviewing Rating</th>
+                        <th>Reviewing Remarks</th>
+                        <th>Accepting Rating</th>
+                        <th>Accepting Remarks</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -579,8 +605,8 @@ const Reviews = () => {
                         const canEdit = Boolean(selectedReviewStage && selectedReview?.canEdit);
                         const stageRatingKey = selectedReviewStage?.ratingKey;
                         const stageRemarksKey = selectedReviewStage?.remarksKey;
-                        const ratingValue = current.rating ?? goal[stageRatingKey] ?? "";
-                        const remarksValue = current.remarks ?? goal[stageRemarksKey] ?? "";
+                        const ratingValue = current.rating ?? (canEdit ? goal[stageRatingKey] : goal.revoRating) ?? "";
+                        const remarksValue = current.remarks ?? (canEdit ? goal[stageRemarksKey] : goal.revoRemarks) ?? "";
                         const sixMonthText = goal.sixMonthProgressText ?? goal.six_month_progress_text ?? "";
                         const achievementText = goal.achievementText ?? goal.achievement_text ?? "";
                         return (
@@ -592,10 +618,8 @@ const Reviews = () => {
                             <td>{goal.goalDescription || "-"}</td>
                             <td>{sixMonthText || "No six-month progress note submitted."}</td>
                             <td>{achievementText || "No actual achievement submitted."}</td>
-                            <td>{goal.roRating || "-"}</td>
-                            <td>{goal.roRemarks || "-"}</td>
                             <td>
-                              {canEdit ? (
+                              {canEdit && stageRatingKey === "roRating" ? (
                                 <select
                                   value={ratingValue}
                                   onChange={(e) => setSelectedReviewInputs((prev) => ({
@@ -604,26 +628,88 @@ const Reviews = () => {
                                   }))}
                                 >
                                   <option value="">Select</option>
-                                  {[1, 2, 3, 4, 5].map((value) => (
-                                    <option key={value} value={value}>{value}</option>
-                                  ))}
+                                  {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
                                 </select>
                               ) : (
-                                ratingValue || "-"
+                                goal.roRating || "-"
                               )}
                             </td>
                             <td>
-                              {canEdit ? (
+                              {canEdit && stageRemarksKey === "roRemarks" ? (
                                 <textarea
-                                  rows={3}
+                                  rows={2}
                                   value={remarksValue}
                                   onChange={(e) => setSelectedReviewInputs((prev) => ({
                                     ...prev,
-                                    [goal.id]: { ...prev[goal.id], rating: prev[goal.id]?.rating ?? ratingValue, remarks: e.target.value }
+                                    [goal.id]: { ...prev[goal.id], remarks: e.target.value }
                                   }))}
                                 />
                               ) : (
-                                remarksValue || "-"
+                                goal.roRemarks || "-"
+                              )}
+                            </td>
+                            
+                            {/* Reviewing Officer Columns */}
+                            <td>
+                              {canEdit && stageRatingKey === "revoRating" ? (
+                                <select
+                                  value={ratingValue}
+                                  onChange={(e) => setSelectedReviewInputs((prev) => ({
+                                    ...prev,
+                                    [goal.id]: { ...prev[goal.id], rating: e.target.value, remarks: prev[goal.id]?.remarks ?? remarksValue }
+                                  }))}
+                                >
+                                  <option value="">Select</option>
+                                  {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              ) : (
+                                goal.revoRating || "-"
+                              )}
+                            </td>
+                            <td>
+                              {canEdit && stageRemarksKey === "revoRemarks" ? (
+                                <textarea
+                                  rows={2}
+                                  value={remarksValue}
+                                  onChange={(e) => setSelectedReviewInputs((prev) => ({
+                                    ...prev,
+                                    [goal.id]: { ...prev[goal.id], remarks: e.target.value }
+                                  }))}
+                                />
+                              ) : (
+                                goal.revoRemarks || "-"
+                              )}
+                            </td>
+
+                            {/* Accepting Officer Columns */}
+                            <td>
+                              {canEdit && stageRatingKey === "aoRating" ? (
+                                <select
+                                  value={ratingValue}
+                                  onChange={(e) => setSelectedReviewInputs((prev) => ({
+                                    ...prev,
+                                    [goal.id]: { ...prev[goal.id], rating: e.target.value, remarks: prev[goal.id]?.remarks ?? remarksValue }
+                                  }))}
+                                >
+                                  <option value="">Select</option>
+                                  {[1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              ) : (
+                                goal.aoRating || "-"
+                              )}
+                            </td>
+                            <td>
+                              {canEdit && stageRemarksKey === "aoRemarks" ? (
+                                <textarea
+                                  rows={2}
+                                  value={remarksValue}
+                                  onChange={(e) => setSelectedReviewInputs((prev) => ({
+                                    ...prev,
+                                    [goal.id]: { ...prev[goal.id], remarks: e.target.value }
+                                  }))}
+                                />
+                              ) : (
+                                goal.aoRemarks || "-"
                               )}
                             </td>
                           </tr>

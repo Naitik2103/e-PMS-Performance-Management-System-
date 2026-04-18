@@ -998,6 +998,10 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         agr.achievement_text,
         agr.ro_rating,
         agr.ro_remarks,
+        agr.revo_rating,
+        agr.revo_remarks,
+        agr.ao_rating,
+        agr.ao_remarks,
         smr.progress_text AS six_month_progress_text
       FROM goals g
       LEFT JOIN appraisal_ratings agr
@@ -1021,11 +1025,15 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         goalTitle: g.goal_title,
         goalDescription: g.goal_description,
         status: g.status,
-        selfRating: g.self_rating,
-        achievementText: g.achievement_text,
-        roRating: g.ro_rating,
-        roRemarks: g.ro_remarks,
-        sixMonthProgressText: g.six_month_progress_text
+        selfRating: g.self_rating ?? g.selfrating,
+        achievementText: g.achievement_text ?? g.achievementtext,
+        roRating: g.ro_rating ?? g.rorating,
+        roRemarks: g.ro_remarks ?? g.roremarks,
+        revoRating: g.revo_rating ?? g.revorating,
+        revoRemarks: g.revo_remarks ?? g.revoremarks,
+        aoRating: g.ao_rating ?? g.aorating,
+        aoRemarks: g.ao_remarks ?? g.aoremarks,
+        sixMonthProgressText: g.six_month_progress_text ?? g.sixmonthprogresstext
       }))
     });
   } catch (error) {
@@ -1402,19 +1410,19 @@ const getAppraisalGoalsWithRatings = async (req, res, next) => {
         goalDescription: g.goal_description,
         weightage: g.weightage,
         status: g.status,
-        sixMonthProgressText: String(g.six_month_progress_text || "").trim() || String(g.six_month_progress_text_legacy || "").trim() || "",
+        sixMonthProgressText: String(g.six_month_progress_text || g.sixmonthprogresstext || "").trim() || String(g.six_month_progress_text_legacy || "").trim() || "",
         achievementText:
-          String(g.achievement_text || "").trim() ||
+          String(g.achievement_text || g.achievementtext || "").trim() ||
           String(legacyAchievementMap.get(String(g.goal_id)) || "").trim() ||
           String(kpaAchievementMap.get(String(g.goal_id)) || "").trim() ||
           "",
-        selfRating: g.selfRating,
-        roRating: g.roRating,
-        roRemarks: g.roRemarks,
-        revoRating: g.revoRating,
-        revoRemarks: g.revoRemarks,
-        aoRating: g.aoRating,
-        aoRemarks: g.aoRemarks
+        selfRating: g.selfRating ?? g.self_rating ?? g.selfrating,
+        roRating: g.roRating ?? g.ro_rating ?? g.rorating,
+        roRemarks: g.roRemarks ?? g.ro_remarks ?? g.roremarks,
+        revoRating: g.revoRating ?? g.revo_rating ?? g.revorating,
+        revoRemarks: g.revoRemarks ?? g.revo_remarks ?? g.revoremarks,
+        aoRating: g.aoRating ?? g.ao_rating ?? g.aorating,
+        aoRemarks: g.aoRemarks ?? g.ao_remarks ?? g.aoremarks
       }))
     });
   } catch (error) {
