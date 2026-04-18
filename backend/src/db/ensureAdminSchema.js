@@ -129,6 +129,88 @@ const ensureAdminSchema = async (pool) => {
     await pool.query(`ALTER TABLE appraisals ALTER COLUMN ao_id DROP NOT NULL`);
   }
 
+  // Unified per-goal appraisal ratings table (RO/RevO/AO + remarks).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS appraisal_ratings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      appraisal_id uuid NOT NULL REFERENCES appraisals(id) ON DELETE CASCADE,
+      goal_id uuid NOT NULL REFERENCES goals(goal_id) ON DELETE CASCADE,
+      achievement_text text NULL,
+      self_rating integer NULL,
+      ro_rating integer NULL,
+      ro_remarks text NULL,
+      revo_rating integer NULL,
+      revo_remarks text NULL,
+      ao_rating integer NULL,
+      ao_remarks text NULL,
+      created_at timestamptz NOT NULL DEFAULT NOW(),
+      updated_at timestamptz NOT NULL DEFAULT NOW(),
+      UNIQUE (appraisal_id, goal_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_appraisal_ratings_appraisal
+    ON appraisal_ratings(appraisal_id)
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_appraisal_ratings_goal
+    ON appraisal_ratings(goal_id)
+  `);
+
+  const { rows: oldGoalRatingsExists } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'appraisal_goal_ratings') AS ok`
+  );
+
+  if (oldGoalRatingsExists[0]?.ok) {
+    await pool.query(`
+      INSERT INTO appraisal_ratings (
+        id,
+        appraisal_id,
+        goal_id,
+        achievement_text,
+        self_rating,
+        ro_rating,
+        ro_remarks,
+        revo_rating,
+        revo_remarks,
+        ao_rating,
+        ao_remarks,
+        created_at,
+        updated_at
+      )
+      SELECT
+        COALESCE(ogr.id, gen_random_uuid()),
+        ogr.appraisal_id,
+        ogr.goal_id,
+        ogr.achievement_text,
+        ogr.self_rating,
+        ogr.ro_rating,
+        ogr.ro_remarks,
+        ogr.revo_rating,
+        ogr.revo_remarks,
+        ogr.ao_rating,
+        ogr.ao_remarks,
+        COALESCE(ogr.created_at, NOW()),
+        COALESCE(ogr.updated_at, NOW())
+      FROM appraisal_goal_ratings ogr
+      ON CONFLICT (appraisal_id, goal_id)
+      DO UPDATE SET
+        achievement_text = COALESCE(EXCLUDED.achievement_text, appraisal_ratings.achievement_text),
+        self_rating = COALESCE(EXCLUDED.self_rating, appraisal_ratings.self_rating),
+        ro_rating = COALESCE(EXCLUDED.ro_rating, appraisal_ratings.ro_rating),
+        ro_remarks = COALESCE(EXCLUDED.ro_remarks, appraisal_ratings.ro_remarks),
+        revo_rating = COALESCE(EXCLUDED.revo_rating, appraisal_ratings.revo_rating),
+        revo_remarks = COALESCE(EXCLUDED.revo_remarks, appraisal_ratings.revo_remarks),
+        ao_rating = COALESCE(EXCLUDED.ao_rating, appraisal_ratings.ao_rating),
+        ao_remarks = COALESCE(EXCLUDED.ao_remarks, appraisal_ratings.ao_remarks),
+        updated_at = GREATEST(appraisal_ratings.updated_at, EXCLUDED.updated_at)
+    `);
+
+    // Remove legacy table after successful migration so all flows use appraisal_ratings only.
+    await pool.query(`DROP TABLE IF EXISTS appraisal_goal_ratings CASCADE`);
+  }
+
   const { rows: seedDes } = await pool.query(`SELECT COUNT(1)::int AS c FROM designations`);
   if ((seedDes[0]?.c || 0) === 0) {
     await pool.query(`

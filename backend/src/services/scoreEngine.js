@@ -13,7 +13,7 @@ const computeScore = async (appraisalId, { actorId, transaction } = {}) => {
     if (!appRes.rows.length) throw new Error("Appraisal not found");
 
     const kpa = await client.query(
-      "SELECT ro_rating, revo_rating, ao_rating FROM appraisal_goal_ratings WHERE appraisal_id = $1",
+      "SELECT ro_rating, revo_rating, ao_rating FROM appraisal_ratings WHERE appraisal_id = $1",
       [appraisalId]
     );
     const attrs = await client.query(

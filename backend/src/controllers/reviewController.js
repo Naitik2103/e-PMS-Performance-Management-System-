@@ -8,12 +8,56 @@ import { ensureIsROForAppraisal, ensureIsRevOForAppraisal, ensureIsAOForAppraisa
 import { assertCycleWindowOpen } from "../services/cycleAccess.js";
 
 let schemaEnsured = false;
+let appraisalColumnsCache = null;
+
+const getAppraisalColumns = async () => {
+  if (appraisalColumnsCache) return appraisalColumnsCache;
+  const { rows } = await pool.query(
+    `
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'appraisals'
+    `
+  );
+  appraisalColumnsCache = new Set(rows.map((r) => r.column_name));
+  return appraisalColumnsCache;
+};
+
+const resolveExistingColumn = (columnSet, candidates = []) => {
+  for (const candidate of candidates) {
+    if (columnSet.has(candidate)) return candidate;
+  }
+  return null;
+};
+
+const updateAppraisalStage = async ({ appraisalId, nextStatus, reviewedAtCandidates = [], remarksField = null, remarksValue = null }) => {
+  const cols = await getAppraisalColumns();
+  const sets = ["status = $1"];
+  const values = [nextStatus];
+  let paramIndex = 2;
+
+  const reviewedAtField = resolveExistingColumn(cols, reviewedAtCandidates);
+  if (reviewedAtField) {
+    sets.push(`${reviewedAtField} = NOW()`);
+  }
+
+  if (remarksField && cols.has(remarksField)) {
+    sets.push(`${remarksField} = $${paramIndex}`);
+    values.push(remarksValue ?? null);
+    paramIndex += 1;
+  }
+
+  values.push(appraisalId);
+  const appraisalIdParam = paramIndex;
+
+  await pool.query(`UPDATE appraisals SET ${sets.join(", ")} WHERE id = $${appraisalIdParam}`, values);
+};
 
 const ensureReviewSchema = async () => {
   if (schemaEnsured) return;
   // Validate schema only. Do NOT create new tables here.
   const requiredTables = [
-    "appraisal_goal_ratings",
+    "appraisal_ratings",
     "quantitative_attributes_master",
     "quantitative_attribute_ratings"
   ];
@@ -49,7 +93,7 @@ const ensureReviewSchema = async () => {
   }
 
   const goalRatingColumns = await pool.query(
-    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appraisal_goal_ratings'"
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appraisal_ratings'"
   );
   const goalRatingColSet = new Set(goalRatingColumns.rows.map((r) => r.column_name));
   const requiredGoalRatingColumns = [
@@ -67,7 +111,7 @@ const ensureReviewSchema = async () => {
   const missingGoalRatingColumns = requiredGoalRatingColumns.filter((name) => !goalRatingColSet.has(name));
   if (missingGoalRatingColumns.length) {
     throw new Error(
-      `Required columns missing in appraisal_goal_ratings: ${missingGoalRatingColumns.join(", ")}. Backend will not auto-alter schema.`
+      `Required columns missing in appraisal_ratings: ${missingGoalRatingColumns.join(", ")}. Backend will not auto-alter schema.`
     );
   }
 
@@ -151,7 +195,7 @@ const ensureGoalRatings = async ({ appraisalId, goals = [], providedRatings = []
     const id = crypto.randomUUID();
     await client.query(
       `
-      INSERT INTO appraisal_goal_ratings
+      INSERT INTO appraisal_ratings
         (id, appraisal_id, goal_id, achievement_text, self_rating, updated_at)
       VALUES
         ($1,$2,$3,$4,$5,NOW())
@@ -170,7 +214,7 @@ const getGoalReviewStage = (status) => {
       ratingField: "ro_rating",
       remarksField: "ro_remarks",
       nextStatus: "ro_rated",
-      reviewedAtField: "ro_reviewed_at",
+      reviewedAtCandidates: ["ro_reviewed_at", "ro_rated_at"],
       notifyTitle: "Review Pending at Reviewing Officer",
       notifyMessage: (name) => `${name} appraisal is pending your review.`,
       notifyType: "review_pending"
@@ -182,7 +226,7 @@ const getGoalReviewStage = (status) => {
       ratingField: "revo_rating",
       remarksField: "revo_remarks",
       nextStatus: "revo_rated",
-      reviewedAtField: "revo_reviewed_at",
+      reviewedAtCandidates: ["revo_reviewed_at", "revo_rated_at"],
       notifyTitle: "Final Approval Required",
       notifyMessage: (name) => `${name} appraisal is pending final approval.`,
       notifyType: "review_pending"
@@ -194,7 +238,7 @@ const getGoalReviewStage = (status) => {
       ratingField: "ao_rating",
       remarksField: "ao_remarks",
       nextStatus: "ao_accepted",
-      reviewedAtField: "ao_reviewed_at",
+      reviewedAtCandidates: ["ao_reviewed_at", "ao_accepted_at"],
       notifyTitle: "Appraisal Finalized",
       notifyMessage: (name, score) => `${name} appraisal has been finalized with score ${Number(score || 0).toFixed(2)}.`,
       notifyType: "review_finalized"
@@ -266,7 +310,7 @@ const submitGoalStageRatings = async (req, res, next) => {
       const id = crypto.randomUUID();
       await pool.query(
         `
-        INSERT INTO appraisal_goal_ratings (id, appraisal_id, goal_id, ${stage.ratingField}, ${stage.remarksField}, updated_at)
+        INSERT INTO appraisal_ratings (id, appraisal_id, goal_id, ${stage.ratingField}, ${stage.remarksField}, updated_at)
         VALUES ($1, $2, $3, $4, $5, NOW())
         ON CONFLICT (appraisal_id, goal_id)
         DO UPDATE SET ${stage.ratingField} = EXCLUDED.${stage.ratingField}, ${stage.remarksField} = EXCLUDED.${stage.remarksField}, updated_at = NOW()
@@ -276,7 +320,11 @@ const submitGoalStageRatings = async (req, res, next) => {
     }
 
     const nextStatus = stage.nextStatus;
-    await pool.query(`UPDATE appraisals SET status = $1, ${stage.reviewedAtField} = NOW() WHERE id = $2`, [nextStatus, appraisalId]);
+    await updateAppraisalStage({
+      appraisalId,
+      nextStatus,
+      reviewedAtCandidates: stage.reviewedAtCandidates
+    });
 
     const scoreResult = await computeScore(appraisalId, { actorId: req.user.userId });
 
@@ -535,7 +583,7 @@ const hasAllFinalAchievements = async (appraisalId, employeeId, cycleId) => {
   if (!goals.length) return false;
 
   const ratingsRes = await pool.query(
-    "SELECT goal_id, achievement_text FROM appraisal_goal_ratings WHERE appraisal_id = $1",
+    "SELECT goal_id, achievement_text FROM appraisal_ratings WHERE appraisal_id = $1",
     [appraisalId]
   );
   const byGoal = new Map(ratingsRes.rows.map((row) => [String(row.goal_id), String(row.achievement_text || "").trim()]));
@@ -619,7 +667,7 @@ const submitSelfSummary = async (req, res, next) => {
     }
 
     const goalRatingsRes = await pool.query(
-      "SELECT goal_id, achievement_text FROM appraisal_goal_ratings WHERE appraisal_id = $1 ORDER BY created_at ASC",
+      "SELECT goal_id, achievement_text FROM appraisal_ratings WHERE appraisal_id = $1 ORDER BY created_at ASC",
       [dbAppraisal.id]
     );
     const filledGoalIds = new Set(
@@ -701,7 +749,7 @@ const rateByRO = async (req, res, next) => {
     const ownership = await ensureIsROForAppraisal(appraisal.id, req.user.userId);
     if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
 
-    await pool.query("UPDATE appraisal_goal_ratings SET ro_rating = $1, updated_at = NOW() WHERE appraisal_id = $2", [
+    await pool.query("UPDATE appraisal_ratings SET ro_rating = $1, updated_at = NOW() WHERE appraisal_id = $2", [
       Number(score || 0),
       appraisal.id
     ]);
@@ -712,10 +760,13 @@ const rateByRO = async (req, res, next) => {
       ratings: attributeRatings
     });
 
-    await pool.query(
-      "UPDATE appraisals SET ro_remarks = $1, ro_reviewed_at = NOW(), status = 'ro_rated' WHERE id = $2",
-      [remarks || null, appraisal.id]
-    );
+    await updateAppraisalStage({
+      appraisalId: appraisal.id,
+      nextStatus: "ro_rated",
+      reviewedAtCandidates: ["ro_reviewed_at", "ro_rated_at"],
+      remarksField: "ro_remarks",
+      remarksValue: remarks || null
+    });
 
     await computeScore(appraisal.id, { actorId: req.user.userId });
 
@@ -766,7 +817,7 @@ const reviewByReviewing = async (req, res, next) => {
 
     // RevO sets its own rating (does not expose RO values while editing; handled in getRevoForm)
     await pool.query(
-      "UPDATE appraisal_goal_ratings SET revo_rating = $1, updated_at = NOW() WHERE appraisal_id = $2",
+      "UPDATE appraisal_ratings SET revo_rating = $1, updated_at = NOW() WHERE appraisal_id = $2",
       [Number(score || 0), appraisal.id]
     );
     await upsertAttributeRatings({
@@ -776,10 +827,13 @@ const reviewByReviewing = async (req, res, next) => {
       ratings: attributeRatings
     });
 
-    await pool.query(
-      "UPDATE appraisals SET revo_remarks = $1, revo_reviewed_at = NOW(), status = 'revo_rated' WHERE id = $2",
-      [remarks || null, appraisal.id]
-    );
+    await updateAppraisalStage({
+      appraisalId: appraisal.id,
+      nextStatus: "revo_rated",
+      reviewedAtCandidates: ["revo_reviewed_at", "revo_rated_at"],
+      remarksField: "revo_remarks",
+      remarksValue: remarks || null
+    });
 
     await computeScore(appraisal.id, { actorId: req.user.userId });
 
@@ -836,7 +890,7 @@ const acceptByAccepting = async (req, res, next) => {
       await client.query("BEGIN");
 
       await client.query(
-        "UPDATE appraisal_goal_ratings SET ao_rating = $1, updated_at = NOW() WHERE appraisal_id = $2",
+        "UPDATE appraisal_ratings SET ao_rating = $1, updated_at = NOW() WHERE appraisal_id = $2",
         [Number(score || 0), appraisal.id]
       );
       await upsertAttributeRatings({
@@ -847,8 +901,12 @@ const acceptByAccepting = async (req, res, next) => {
         client
       });
 
+      const appraisalCols = await getAppraisalColumns();
+      const aoReviewedAtField = resolveExistingColumn(appraisalCols, ["ao_reviewed_at", "ao_accepted_at"]);
+      const aoSetFragments = ["ao_remarks = $1", "status = 'ao_accepted'"];
+      if (aoReviewedAtField) aoSetFragments.push(`${aoReviewedAtField} = NOW()`);
       await client.query(
-        "UPDATE appraisals SET ao_remarks = $1, ao_reviewed_at = NOW(), status = 'ao_accepted' WHERE id = $2",
+        `UPDATE appraisals SET ${aoSetFragments.join(", ")} WHERE id = $2`,
         [remarks || null, appraisal.id]
       );
 
@@ -940,7 +998,7 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         agr.achievement_text,
         smr.progress_text AS six_month_progress_text
       FROM goals g
-      LEFT JOIN appraisal_goal_ratings agr
+      LEFT JOIN appraisal_ratings agr
         ON agr.goal_id = g.goal_id
        AND agr.appraisal_id = $1
       LEFT JOIN six_month_review smr
@@ -1172,7 +1230,7 @@ const getRevoForm = async (req, res, next) => {
     const goalRatingsRes = await pool.query(
       `
       SELECT goal_id, achievement_text, self_rating, NULL::int AS ro_rating, revo_rating, ao_rating
-      FROM appraisal_goal_ratings
+      FROM appraisal_ratings
       WHERE appraisal_id = $1
       ORDER BY created_at ASC
       `,
@@ -1237,7 +1295,7 @@ const getAoForm = async (req, res, next) => {
     if (review.ao_id !== req.user.userId) return res.status(403).json({ error: "This appraisal is not assigned to you" });
 
     const goalRatingsRes = await pool.query(
-      "SELECT goal_id, achievement_text, self_rating, ro_rating, revo_rating, ao_rating FROM appraisal_goal_ratings WHERE appraisal_id = $1 ORDER BY created_at ASC",
+      "SELECT goal_id, achievement_text, self_rating, ro_rating, revo_rating, ao_rating FROM appraisal_ratings WHERE appraisal_id = $1 ORDER BY created_at ASC",
       [review.id]
     );
     const attributeRatingsRes = await pool.query(
@@ -1314,7 +1372,7 @@ const getAppraisalGoalsWithRatings = async (req, res, next) => {
         smr.progress_text as six_month_progress_text,
         smrv.progress_text as six_month_progress_text_legacy
       FROM goals g
-      LEFT JOIN appraisal_goal_ratings agr ON agr.goal_id = g.goal_id AND agr.appraisal_id = $1
+      LEFT JOIN appraisal_ratings agr ON agr.goal_id = g.goal_id AND agr.appraisal_id = $1
       LEFT JOIN six_month_review smr ON smr.goal_id = g.goal_id AND smr.employee_id = $2 AND smr.cycle_id = $3
       LEFT JOIN six_month_reviews smrv ON smrv.goal_id = g.goal_id AND smrv.employee_id = $2 AND smrv.cycle_id = $3
       WHERE ${goalsWhereClause}
@@ -1384,7 +1442,7 @@ const updateGoalRating = async (req, res, next) => {
     const id = crypto.randomUUID();
     await pool.query(
       `
-      INSERT INTO appraisal_goal_ratings (id, appraisal_id, goal_id, self_rating, achievement_text, updated_at)
+      INSERT INTO appraisal_ratings (id, appraisal_id, goal_id, self_rating, achievement_text, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW())
       ON CONFLICT (appraisal_id, goal_id)
       DO UPDATE SET self_rating = EXCLUDED.self_rating, achievement_text = EXCLUDED.achievement_text, updated_at = NOW()
@@ -1434,7 +1492,7 @@ const submitAnnualGoalRatings = async (req, res, next) => {
       const existingId = crypto.randomUUID();
       await pool.query(
         `
-        INSERT INTO appraisal_goal_ratings (id, appraisal_id, goal_id, self_rating, achievement_text, updated_at)
+        INSERT INTO appraisal_ratings (id, appraisal_id, goal_id, self_rating, achievement_text, updated_at)
         VALUES ($1, $2, $3, $4, $5, NOW())
         ON CONFLICT (appraisal_id, goal_id)
         DO UPDATE SET achievement_text = EXCLUDED.achievement_text, updated_at = NOW()
