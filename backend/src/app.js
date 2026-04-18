@@ -22,9 +22,15 @@ dotenv.config();
 
 const app = express();
 
+const BUILD_ID = new Date().toISOString();
+
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
+app.use((req, res, next) => {
+  res.setHeader("X-EPMS-Build", BUILD_ID);
+  next();
+});
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "e-PMS API" });

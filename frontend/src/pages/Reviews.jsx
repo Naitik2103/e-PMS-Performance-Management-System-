@@ -20,6 +20,9 @@ const Reviews = () => {
   const [currentAppraisalId, setCurrentAppraisalId] = useState("");
   const [achievementInputs, setAchievementInputs] = useState({});
   const [isAnnualGoalsSubmitted, setIsAnnualGoalsSubmitted] = useState(false);
+  const [persistedSelfSummary, setPersistedSelfSummary] = useState("");
+  const [persistedAchievementsComplete, setPersistedAchievementsComplete] = useState(false);
+  const [currentAppraisalStatus, setCurrentAppraisalStatus] = useState("");
   const [selectedReview, setSelectedReview] = useState(null);
   const [selectedReviewGoals, setSelectedReviewGoals] = useState([]);
   const [selectedReviewInputs, setSelectedReviewInputs] = useState({});
@@ -41,11 +44,6 @@ const Reviews = () => {
     );
   }, [reviews, currentAppraisalId, activeCycleId]);
 
-  const isSelfAppraisalLocked = useMemo(
-    () => ["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes(currentReview?.status),
-    [currentReview?.status]
-  );
-
   const allFinalAchievementsFilled = useMemo(
     () => appraisalGoals.length > 0 && appraisalGoals.every((goal) => {
       const value = achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? "";
@@ -53,6 +51,14 @@ const Reviews = () => {
     }),
     [appraisalGoals, achievementInputs, currentAppraisalId]
   );
+
+  const hasPersistedSelfSummary = useMemo(() => String(persistedSelfSummary || "").trim().length > 0, [persistedSelfSummary]);
+
+  const isSelfAppraisalLocked = useMemo(() => {
+    const statusForLock = currentAppraisalStatus || currentReview?.status;
+    const isLockedStage = ["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes(statusForLock);
+    return isLockedStage && hasPersistedSelfSummary && persistedAchievementsComplete;
+  }, [currentAppraisalStatus, currentReview?.status, hasPersistedSelfSummary, persistedAchievementsComplete]);
 
   const selectedReviewStage = useMemo(() => {
     if (!selectedReview) return null;
@@ -127,8 +133,13 @@ const Reviews = () => {
 
       const response = await apiClient.get(`/reviews/my-goals?${params.toString()}`);
       setCurrentAppraisalId(response.data?.appraisalId || "");
+      setCurrentAppraisalStatus(String(response.data?.appraisalStatus || ""));
       setAppraisalGoals(response.data?.goals || []);
       setIsAnnualGoalsSubmitted(false);
+      const apiSummary = String(response.data?.selfSummary || "");
+      setPersistedSelfSummary(apiSummary);
+      setPersistedAchievementsComplete(Boolean(response.data?.persistedAchievementsComplete));
+      setSelfForm((prev) => ({ ...prev, selfSummary: apiSummary }));
       const achievementMap = (response.data?.goals || []).reduce((acc, goal) => {
         acc[`${response.data?.appraisalId || ""}-${goal.id}`] = goal.achievementText || "";
         return acc;
@@ -138,6 +149,9 @@ const Reviews = () => {
       console.error("Failed to load goals:", err);
       setAppraisalGoals([]);
       setCurrentAppraisalId("");
+      setCurrentAppraisalStatus("");
+      setPersistedSelfSummary("");
+      setPersistedAchievementsComplete(false);
       setAchievementInputs({});
     }
   };
@@ -211,6 +225,7 @@ const Reviews = () => {
       setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goalId}`]: achievementText }));
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Failed to update goal rating");
+      throw err;
     }
   };
 
@@ -231,6 +246,7 @@ const Reviews = () => {
         goals: goalPayload
       });
       setIsAnnualGoalsSubmitted(true);
+      await Promise.all([loadReviews(), loadYearEndGoals()]);
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Unable to submit annual goals");
     }
@@ -389,7 +405,7 @@ const Reviews = () => {
                       }}
                       onBlur={(e) => {
                         if (isSelfAppraisalLocked) return;
-                        updateGoalRating(goal.id, { achievementText: e.target.value });
+                        updateGoalRating(goal.id, { achievementText: e.target.value }).catch(() => {});
                       }}
                       placeholder="Example: Both papers now published. Paper 1 accepted in November, Paper 2 accepted in January."
                     />
@@ -445,12 +461,12 @@ const Reviews = () => {
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" disabled={isSelfAppraisalLocked || !allFinalAchievementsFilled} onClick={submitSelfSummary}>
+              <button className="btn" type="button" disabled={isSelfAppraisalLocked || !String(selfForm.selfSummary || "").trim()} onClick={submitSelfSummary}>
                 {isSelfAppraisalLocked ? "Submitted" : "Submit Summary"}
               </button>
             </div>
-            {!allFinalAchievementsFilled && !isSelfAppraisalLocked && (
-              <div className="muted">Fill every final achievement before submitting the self-summary.</div>
+            {!isSelfAppraisalLocked && !String(selfForm.selfSummary || "").trim() && (
+              <div className="muted">Enter self summary to enable submission.</div>
             )}
           </div>
         </div>
