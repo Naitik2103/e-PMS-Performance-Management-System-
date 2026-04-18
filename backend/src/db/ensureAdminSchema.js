@@ -41,7 +41,7 @@ const ensureAdminSchema = async (pool) => {
   await pool.query(`
     UPDATE appraisal_cycles
     SET status = 'closed'
-    WHERE closed_at IS NOT NULL AND (status IS NULL OR status = '')
+    WHERE closed_at IS NOT NULL AND (status IS NULL OR status::text = '')
   `);
   // Legacy rows only: open cycle with no status yet → treat as active (one-time backfill).
   await pool.query(`
