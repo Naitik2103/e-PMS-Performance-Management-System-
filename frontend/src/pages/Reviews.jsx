@@ -410,6 +410,18 @@ const Reviews = () => {
                       placeholder="Example: Both papers now published. Paper 1 accepted in November, Paper 2 accepted in January."
                     />
                   </div>
+                  {goal.roRating && (
+                    <>
+                      <div className="annual-rating-ref-block">
+                        <div className="annual-rating-ref-title">RO Rating</div>
+                        <p className="annual-rating-progress-note">{goal.roRating} / 5</p>
+                      </div>
+                      <div className="annual-rating-ref-block">
+                        <div className="annual-rating-ref-title">RO Remarks</div>
+                        <p className="annual-rating-progress-note">{goal.roRemarks || "No remarks provided."}</p>
+                      </div>
+                    </>
+                  )}
                 </div>
 
               </div>
@@ -552,8 +564,10 @@ const Reviews = () => {
                         <th>Original Goal</th>
                         <th>Six-Month Progress</th>
                         <th>Actual Achievement</th>
-                        <th>Rating</th>
-                        <th>Remarks</th>
+                        <th>RO Rating</th>
+                        <th>RO Remarks</th>
+                        <th>Action Rating</th>
+                        <th>Action Remarks</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -578,6 +592,8 @@ const Reviews = () => {
                             <td>{goal.goalDescription || "-"}</td>
                             <td>{sixMonthText || "No six-month progress note submitted."}</td>
                             <td>{achievementText || "No actual achievement submitted."}</td>
+                            <td>{goal.roRating || "-"}</td>
+                            <td>{goal.roRemarks || "-"}</td>
                             <td>
                               {canEdit ? (
                                 <select

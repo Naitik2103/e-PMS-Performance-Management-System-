@@ -996,6 +996,8 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         g.status,
         agr.self_rating,
         agr.achievement_text,
+        agr.ro_rating,
+        agr.ro_remarks,
         smr.progress_text AS six_month_progress_text
       FROM goals g
       LEFT JOIN appraisal_ratings agr
@@ -1021,6 +1023,8 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         status: g.status,
         selfRating: g.self_rating,
         achievementText: g.achievement_text,
+        roRating: g.ro_rating,
+        roRemarks: g.ro_remarks,
         sixMonthProgressText: g.six_month_progress_text
       }))
     });
