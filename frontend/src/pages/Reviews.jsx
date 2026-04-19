@@ -23,6 +23,7 @@ const Reviews = () => {
   const [persistedSelfSummary, setPersistedSelfSummary] = useState("");
   const [persistedAchievementsComplete, setPersistedAchievementsComplete] = useState(false);
   const [currentAppraisalStatus, setCurrentAppraisalStatus] = useState("");
+  const [appraisalAttributeRatings, setAppraisalAttributeRatings] = useState([]);
   const [selectedReview, setSelectedReview] = useState(null);
   const [selectedReviewGoals, setSelectedReviewGoals] = useState([]);
   const [selectedReviewInputs, setSelectedReviewInputs] = useState({});
@@ -169,6 +170,7 @@ const Reviews = () => {
         return acc;
       }, {});
       setAchievementInputs(achievementMap);
+      setAppraisalAttributeRatings(response.data?.attributeRatings || []);
     } catch (err) {
       console.error("Failed to load goals:", err);
       setAppraisalGoals([]);
@@ -177,6 +179,7 @@ const Reviews = () => {
       setPersistedSelfSummary("");
       setPersistedAchievementsComplete(false);
       setAchievementInputs({});
+      setAppraisalAttributeRatings([]);
     }
   };
 
@@ -515,6 +518,73 @@ const Reviews = () => {
               Fill every final achievement to enable submission.
             </div>
           )}
+
+          {/* Employee Quantitative Attributes View */}
+          {activeRole === ROLES.EMPLOYEE && ["ao_accepted", "completed"].includes((currentAppraisalStatus || "").toLowerCase()) && appraisalAttributeRatings.length > 0 && (
+            <div style={{ marginTop: "30px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
+              <h2 style={{ marginBottom: "20px" }}>Quantitative Attributes</h2>
+              {[...new Set(attributeMasters.map(a => a.category))].map(cat => {
+                const catAttrs = attributeMasters.filter(a => a.category === cat);
+                
+                const calculateAverage = (category, role) => {
+                  const relevantRatings = appraisalAttributeRatings.filter(r => r.category === category && String(r.ratedByRole) === String(role));
+                  if (relevantRatings.length === 0) return "0.00";
+                  const sum = relevantRatings.reduce((s, r) => s + Number(r.rating || 0), 0);
+                  return (sum / relevantRatings.length).toFixed(2);
+                };
+
+                return (
+                  <div key={cat} style={{ marginBottom: "24px" }}>
+                    <div style={{ backgroundColor: "#f8fafc", padding: "12px 16px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <h3 style={{ margin: 0, fontSize: "16px", color: "#334155" }}>{cat}</h3>
+                      </div>
+                      <div style={{ display: "flex", gap: "20px", fontSize: "13px" }}>
+                        <span style={{ color: "#64748b" }}>RO Avg: <strong style={{ color: "#2563eb" }}>{calculateAverage(cat, ROLES.REPORTING_OFFICER)}</strong></span>
+                        <span style={{ color: "#64748b" }}>Reviewing Avg: <strong style={{ color: "#2563eb" }}>{calculateAverage(cat, ROLES.REVIEWING_OFFICER)}</strong></span>
+                        <span style={{ color: "#64748b" }}>Accepting Avg: <strong style={{ color: "#2563eb" }}>{calculateAverage(cat, ROLES.ACCEPTING_OFFICER)}</strong></span>
+                      </div>
+                    </div>
+                    <div className="table-wrap" style={{ marginTop: "12px" }}>
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th style={{ width: "30%" }}>Attribute</th>
+                            <th>RO Rating</th>
+                            <th>Reviewing Rating</th>
+                            <th>Accepting Rating</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {catAttrs.map(attr => {
+                            const getRating = (roleKey) => {
+                              const found = appraisalAttributeRatings.find(r => 
+                                String(r.attributeId) === String(attr.id) && 
+                                String(r.ratedByRole) === String(roleKey)
+                              );
+                              return found ? found.rating : "-";
+                            };
+
+                            return (
+                              <tr key={attr.id}>
+                                <td>
+                                  <div style={{ fontWeight: 600 }}>{attr.attributeName}</div>
+                                  <div className="muted small" style={{ marginTop: "4px" }}>{attr.description}</div>
+                                </td>
+                                <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.REPORTING_OFFICER)}</td>
+                                <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.REVIEWING_OFFICER)}</td>
+                                <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.ACCEPTING_OFFICER)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -595,9 +665,9 @@ const Reviews = () => {
                 <td><StatusBadge status={review.status} /></td>
                 <td>{review.finalScore ? Number(review.finalScore).toFixed(2) : "-"}</td>
                 <td>
-                  {(activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER || activeRole === ROLES.ACCEPTING_OFFICER) && (
+                  {(activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER || activeRole === ROLES.ACCEPTING_OFFICER || (activeRole === ROLES.EMPLOYEE && ["ao_accepted", "completed"].includes(review.status))) && (
                     <button className="btn" type="button" onClick={() => openReview(review)}>
-                      {selectedReview?.id === review.id ? "Review Open" : "Open Review"}
+                      {selectedReview?.id === review.id ? "Review Open" : (activeRole === ROLES.EMPLOYEE ? "View Details" : "Open Review")}
                     </button>
                   )}
                 </td>
@@ -770,7 +840,11 @@ const Reviews = () => {
                 </div>
 
                 {/* Quantitative Attributes UI */}
-                {attributeMasters.length > 0 && ["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes((selectedReview?.status || "").toLowerCase()) && (
+                {attributeMasters.length > 0 && (
+                  activeRole !== ROLES.EMPLOYEE ? 
+                  ["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes((selectedReview?.status || "").toLowerCase()) :
+                  ["ao_accepted", "completed"].includes((selectedReview?.status || "").toLowerCase())
+                ) && (
                   <div style={{ marginTop: "30px" }}>
                     <h3>Quantitative Attributes</h3>
                     {[...new Set(attributeMasters.map(a => a.category))].map(cat => {

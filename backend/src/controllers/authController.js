@@ -634,7 +634,7 @@ const getActiveCycle = async (req, res, next) => {
     if (!cycle) {
       return res.json(null);
     }
-    
+
     // Return date strings as-is from database (YYYY-MM-DD format)
     // Do NOT convert to ISO strings to avoid timezone issues
     const cycleDates = {
@@ -655,7 +655,7 @@ const getActiveCycle = async (req, res, next) => {
       createdAt: cycle.createdAt,
       activatedAt: cycle.activatedAt
     };
-    
+
     return res.json(cycleDates);
   } catch (error) {
     return next(error);

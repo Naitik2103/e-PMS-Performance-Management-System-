@@ -1074,6 +1074,11 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
       cycleId: cycle.cycle_id
     });
 
+    const attributeRatingsRes = await pool.query(
+      "SELECT attribute_id, rater_role, rating, category, attribute_key, created_at FROM quantitative_attribute_rating WHERE appraisal_id = $1 ORDER BY created_at ASC",
+      [appraisal.id]
+    );
+
     return res.json({
       appraisalId: appraisal.id,
       appraisalStatus: appraisal.status,
@@ -1094,6 +1099,13 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
         aoRating: g.ao_rating ?? g.aorating,
         aoRemarks: g.ao_remarks ?? g.aoremarks,
         sixMonthProgressText: g.six_month_progress_text ?? g.sixmonthprogresstext
+      })),
+      attributeRatings: attributeRatingsRes.rows.map(r => ({
+        attributeId: r.attribute_id,
+        ratedByRole: r.rater_role,
+        rating: r.rating,
+        category: r.category,
+        attributeKey: r.attribute_key
       }))
     });
   } catch (error) {

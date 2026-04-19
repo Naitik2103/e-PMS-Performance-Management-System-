@@ -92,7 +92,18 @@ const Goals = () => {
     return map;
   }, [goals]);
 
-  // Get the total of all draft and returned goals (unsubmitted goals)
+  // Get the total weightage of ALL goals for the currently selected cycle year
+  const totalCycleWeightage = useMemo(() => {
+    const selectedYear = Number(form.year);
+    return goals
+      .filter((g) => {
+        const goalYear = Number(g.cycle?.year || g.year || 0);
+        return goalYear === selectedYear || !goalYear; // Include goals with no year if they are in the list
+      })
+      .reduce((sum, g) => sum + Number(g.weightage || 0), 0);
+  }, [goals, form.year]);
+
+  // Get the total of all draft and returned goals (unsubmitted goals) - used for showing/hiding form
   const draftGoalsTotal = useMemo(() => {
     return goals
       .filter((g) => ["draft", "returned"].includes(g.status))
@@ -104,10 +115,13 @@ const Goals = () => {
     return goals.some((g) => ["draft", "returned"].includes(g.status));
   }, [goals]);
 
+  const isWeightageComplete = Math.abs(totalCycleWeightage - 100) < 0.01; // Allow for floating point errors
+  const progressPercentage = Math.min((totalCycleWeightage / 100) * 100, 100);
+
   const shouldShowGoalForm =
     activeRole === ROLES.EMPLOYEE &&
     isGoalPeriodActive &&
-    (goals.length === 0 || hasUnsubmittedGoals);
+    (goals.length === 0 || hasUnsubmittedGoals || !isWeightageComplete);
 
   const groupedGoals = useMemo(() => {
     const groups = [];
@@ -131,9 +145,6 @@ const Goals = () => {
 
     return groups;
   }, [goals]);
-
-  const isWeightageComplete = Math.abs(draftGoalsTotal - 100) < 0.01; // Allow for floating point errors
-  const progressPercentage = Math.min((draftGoalsTotal / 100) * 100, 100);
 
   const handleSave = async () => {
     setError("");
@@ -371,7 +382,7 @@ const Goals = () => {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span className="muted">Goal Weightage Progress</span>
                 <span style={{ fontWeight: 600, color: isWeightageComplete ? "#4CAF50" : "#f44336" }}>
-                  {draftGoalsTotal.toFixed(2)} / 100.00
+                  {totalCycleWeightage.toFixed(2)} / 100.00
                 </span>
               </div>
               <div style={{
@@ -394,7 +405,7 @@ const Goals = () => {
               <div>
                 {!isWeightageComplete && (
                   <div className="error-text" style={{ fontSize: "0.9em", margin: 0 }}>
-                    Total must equal 100.00 to submit (currently {draftGoalsTotal.toFixed(2)})
+                    Total must equal 100.00 to submit (currently {totalCycleWeightage.toFixed(2)})
                   </div>
                 )}
                 {isWeightageComplete && (

@@ -240,7 +240,7 @@ const submitCycleGoals = async (req, res, next) => {
     }
 
     await pool.query(
-      "UPDATE goals SET status = 'submitted', updated_at = NOW() WHERE user_id = $1 AND cycle_id = $2",
+      "UPDATE goals SET status = 'submitted', updated_at = NOW() WHERE user_id = $1 AND cycle_id = $2 AND status IN ('draft', 'returned')",
       [req.user.id, cycle.cycle_id]
     );
 
@@ -583,7 +583,7 @@ const approveGoalByRO = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { remarks, decision = "approve" } = req.body;
-    const goalRes = await pool.query("SELECT goal_id, user_id, status, goal_title, cycle_id FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
+    const goalRes = await pool.query("SELECT goal_id, user_id, status, goal_title, cycle_id, appraisal_id FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
     const goal = goalRes.rows[0];
     if (!goal) {
       res.status(404);
@@ -604,12 +604,33 @@ const approveGoalByRO = async (req, res, next) => {
       return next(new Error("Goal is not ready for RO action"));
     }
 
-    const nextStatus = decision === "return" ? "returned" : "approved";
-    await pool.query(
-      "UPDATE goals SET status = $1, ro_approval_remarks = $2, updated_at = NOW() WHERE goal_id = $3",
-      [nextStatus, remarks || null, id]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const nextStatus = decision === "return" ? "returned" : "approved";
+      await client.query(
+        "UPDATE goals SET status = $1, ro_approval_remarks = $2, updated_at = NOW() WHERE goal_id = $3",
+        [nextStatus, remarks || null, id]
+      );
 
+      if (decision === "return") {
+        const iterRes = await client.query("SELECT COALESCE(MAX(iteration_number), 0) as max_iter FROM kpa_sendback_history WHERE goal_id = $1", [id]);
+        const nextIter = (Number(iterRes.rows[0]?.max_iter) || 0) + 1;
+        await client.query(
+          `INSERT INTO kpa_sendback_history (appraisal_id, goal_id, sent_back_by, iteration_number, sent_back_at, sent_back_role, reason)
+           VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+          [goal.appraisal_id, id, req.user.id, nextIter, ROLES.REPORTING_OFFICER, remarks || "No reason provided"]
+        );
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const nextStatus = decision === "return" ? "returned" : "approved";
     await notifyUser({
       userId: goal.user_id,
       senderId: req.user.id,
@@ -632,7 +653,7 @@ const approveGoalByReviewing = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { remarks, decision = "approve" } = req.body;
-    const goalRes = await pool.query("SELECT goal_id, user_id, status, cycle_id, goal_title FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
+    const goalRes = await pool.query("SELECT goal_id, user_id, status, cycle_id, goal_title, appraisal_id FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
     const goal = goalRes.rows[0];
     if (!goal) {
       res.status(404);
@@ -652,12 +673,33 @@ const approveGoalByReviewing = async (req, res, next) => {
       return next(new Error("Access denied for this goal"));
     }
 
-    const nextStatus = decision === "return" ? "returned" : "approved";
-    await pool.query(
-      "UPDATE goals SET status = $1, updated_at = NOW() WHERE goal_id = $2",
-      [nextStatus, id]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const nextStatus = decision === "return" ? "returned" : "approved";
+      await client.query(
+        "UPDATE goals SET status = $1, updated_at = NOW() WHERE goal_id = $2",
+        [nextStatus, id]
+      );
 
+      if (decision === "return") {
+        const iterRes = await client.query("SELECT COALESCE(MAX(iteration_number), 0) as max_iter FROM kpa_sendback_history WHERE goal_id = $1", [id]);
+        const nextIter = (Number(iterRes.rows[0]?.max_iter) || 0) + 1;
+        await client.query(
+          `INSERT INTO kpa_sendback_history (appraisal_id, goal_id, sent_back_by, iteration_number, sent_back_at, sent_back_role, reason)
+           VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+          [goal.appraisal_id, id, req.user.id, nextIter, ROLES.REVIEWING_OFFICER, remarks || "No reason provided"]
+        );
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const nextStatus = decision === "return" ? "returned" : "approved";
     await notifyUser({
       userId: goal.user_id,
       senderId: req.user.id,
@@ -775,8 +817,28 @@ const sendbackGoalsByAppraisalId = async (req, res, next) => {
     }
     const ownership = await ensureIsROForAppraisal(appraisalId, req.user.userId);
     if (!ownership.ok) return res.status(ownership.error === "Appraisal not found" ? 404 : 403).json({ error: ownership.error });
-    await pool.query("UPDATE goals SET status = 'returned', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
-    await pool.query("UPDATE appraisals SET status = 'draft' WHERE id = $1", [appraisalId]);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const goalsRes = await client.query("SELECT goal_id FROM goals WHERE appraisal_id = $1", [appraisalId]);
+      for (const goal of goalsRes.rows) {
+        const iterRes = await client.query("SELECT COALESCE(MAX(iteration_number), 0) as max_iter FROM kpa_sendback_history WHERE goal_id = $1", [goal.goal_id]);
+        const nextIter = (Number(iterRes.rows[0]?.max_iter) || 0) + 1;
+        await client.query(
+          `INSERT INTO kpa_sendback_history (appraisal_id, goal_id, sent_back_by, iteration_number, sent_back_at, sent_back_role, reason)
+           VALUES ($1, $2, $3, $4, NOW(), $5, $6)`,
+          [appraisalId, goal.goal_id, req.user.id, nextIter, ROLES.REPORTING_OFFICER, "Bulk Appraisal Return"]
+        );
+      }
+      await client.query("UPDATE goals SET status = 'returned', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
+      await client.query("UPDATE appraisals SET status = 'draft' WHERE id = $1", [appraisalId]);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
     return res.json({ message: "Goals sent back" });
   } catch (error) {
     return next(error);

@@ -1,7 +1,7 @@
 import React from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Bell, ChevronDown, Check, Menu } from "lucide-react";
+import { Bell, ChevronDown, Check } from "lucide-react";
 import { apiClient } from "../api/client";
 import { roleLabel } from "../constants/rbac";
 
@@ -25,10 +25,9 @@ const pageTitles = {
   "/reviews": "Year-End Reviews",
 };
 
-const Topbar = ({ onToggleSidebar }) => {
+const Topbar = () => {
   const { user, switchRole } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = React.useState(0);
   const [notifOpen, setNotifOpen] = React.useState(false);
   const [profileOpen, setProfileOpen] = React.useState(false);
@@ -112,32 +111,9 @@ const Topbar = ({ onToggleSidebar }) => {
     }
   };
 
-  const getNotificationTarget = (item) => {
-    const focusId = item?.entityId ? String(item.entityId) : "";
-    if (item?.type === "goal_submission" || item?.entity === "goal") {
-      return focusId ? `/goals?focus=${encodeURIComponent(focusId)}` : "/goals";
-    }
-    if (item?.type === "review_pending" || item?.entity === "appraisal") {
-      return focusId ? `/reviews?focus=${encodeURIComponent(focusId)}` : "/reviews";
-    }
-    return null;
-  };
-
-  const handleNotificationClick = async (item) => {
-    await markAsRead(item.id);
-    const target = getNotificationTarget(item);
-    setNotifOpen(false);
-    if (target) {
-      navigate(target);
-    }
-  };
-
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <button className="topbar-menu-btn" type="button" aria-label="Toggle navigation" onClick={onToggleSidebar}>
-          <Menu size={18} />
-        </button>
         <h1 className="topbar-title">{title}</h1>
         <p className="topbar-date">{today}</p>
       </div>
@@ -199,7 +175,7 @@ const Topbar = ({ onToggleSidebar }) => {
                       key={item.id}
                       type="button"
                       className={`topbar-notif-item${item.isRead ? "" : " unread"}`}
-                      onClick={() => handleNotificationClick(item)}
+                      onClick={() => markAsRead(item.id)}
                     >
                       <div className="topbar-notif-title">{item.title}</div>
                       <div className="topbar-notif-message">{item.message}</div>
