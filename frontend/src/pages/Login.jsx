@@ -23,11 +23,9 @@ const Login = () => {
   const [otpRequested, setOtpRequested] = useState(false);
 
   const resetForgotPasswordState = () => {
-    setOtp("");
     setNewPassword("");
     setConfirmPassword("");
     setShowNewPassword(false);
-    setOtpRequested(false);
   };
 
   const openForgotPassword = () => {
@@ -61,7 +59,7 @@ const Login = () => {
     }
   };
 
-  const handleRequestOtp = async (event) => {
+  const handleRequestResetLink = async (event) => {
     event.preventDefault();
     setError("");
     setSuccess("");
@@ -73,41 +71,10 @@ const Login = () => {
 
     setLoading(true);
     try {
-      const response = await apiClient.post("/auth/forgot-password/request", { email: resetEmail });
-      setOtpRequested(true);
-      setSuccess(response.data?.message || "OTP sent. Check your email.");
+      const response = await apiClient.post("/auth/forgot-password", { email: resetEmail });
+      setSuccess(response.data?.message || "Reset link sent. Check your email.");
     } catch (err) {
-      setError(err.response?.data?.error || "Unable to send OTP. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async (event) => {
-    event.preventDefault();
-    setError("");
-    setSuccess("");
-
-    if (!resetEmail || !otp || !newPassword || !confirmPassword) {
-      setError("Please fill in all required fields.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("New password and confirm password must match.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await apiClient.post("/auth/forgot-password/verify", { email: resetEmail, otp });
-      await apiClient.post("/auth/forgot-password/reset", { email: resetEmail, otp, newPassword });
-      setSuccess("Password reset successful. You can now sign in with your new password.");
-      setOtpRequested(false);
-      setOtp("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      setError(err.response?.data?.error || "Unable to reset password. Please verify OTP and try again.");
+      setError(err.response?.data?.error || "Unable to send reset link. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -136,7 +103,7 @@ const Login = () => {
               <p>
                 {authMode === "signin"
                   ? "Sign in with your official credentials to access your dashboard."
-                  : "Request OTP on your official email, then use it to set a new password."}
+                  : "Enter your official email to receive a password reset link."}
               </p>
             </div>
             {authMode === "signin" ? (
@@ -187,7 +154,7 @@ const Login = () => {
               </form>
             ) : (
               <>
-                <form className="form-grid" onSubmit={handleRequestOtp}>
+                <form className="form-grid" onSubmit={handleRequestResetLink}>
                   <div>
                     <label htmlFor="reset-email">Official Email Address</label>
                     <input
@@ -202,64 +169,9 @@ const Login = () => {
                   {error && <div className="error-text">{error}</div>}
                   {success && <div className="success-text">{success}</div>}
                   <button className="btn login-submit-btn" type="submit" disabled={loading}>
-                    {loading ? "Sending OTP..." : "Send OTP"}
+                    {loading ? "Sending Link..." : "Send Reset Link"}
                   </button>
                 </form>
-
-                {otpRequested && (
-                  <form className="form-grid login-reset-form" onSubmit={handleResetPassword}>
-                    <div className="login-divider">Reset password with OTP</div>
-                    <div>
-                      <label htmlFor="reset-otp">OTP</label>
-                      <input
-                        id="reset-otp"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Enter 6-digit OTP"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="new-password">New Password</label>
-                      <div className="login-password-wrap">
-                        <input
-                          id="new-password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          type={showNewPassword ? "text" : "password"}
-                          placeholder="Create new password"
-                          required
-                        />
-                        <button
-                          className="login-password-toggle"
-                          type="button"
-                          aria-label={showNewPassword ? "Hide password" : "Show password"}
-                          onClick={() => setShowNewPassword((prev) => !prev)}
-                        >
-                          {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="confirm-password">Confirm New Password</label>
-                      <input
-                        id="confirm-password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        type={showNewPassword ? "text" : "password"}
-                        placeholder="Re-enter new password"
-                        required
-                      />
-                    </div>
-                    {error && <div className="error-text">{error}</div>}
-                    {success && <div className="success-text">{success}</div>}
-                    <button className="btn login-submit-btn" type="submit" disabled={loading}>
-                      {loading ? "Resetting..." : "Reset Password"}
-                    </button>
-                  </form>
-                )}
 
                 <button className="login-mode-switch" type="button" onClick={backToSignIn}>
                   Back to sign in

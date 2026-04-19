@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import RoleSelect from "./pages/RoleSelect";
 import Dashboard from "./pages/Dashboard";
 import Goals from "./pages/Goals";
@@ -27,6 +28,7 @@ const App = () => {
   const pageMap = {
     "/": <HomePage />,
     "/login": <Login />,
+    "/reset-password": <ResetPassword />,
     "/select-role": preAuth?.token ? <RoleSelect /> : <Navigate to="/login" replace />,
     "/unauthorized": <Unauthorized />,
 

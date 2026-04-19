@@ -7,9 +7,8 @@ import {
   selectRole,
   switchRole,
   getActiveCycle,
-  requestPasswordResetOtp,
-  verifyPasswordResetOtp,
-  resetPasswordWithOtp
+  forgotPasswordRequest,
+  resetForgotPassword
 } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 import {
@@ -23,9 +22,8 @@ import { validate } from "../middleware/validate.js";
 const router = express.Router();
 
 router.post("/login", loginValidation, validate, login);
-router.post("/forgot-password/request", forgotPasswordRequestValidation, validate, requestPasswordResetOtp);
-router.post("/forgot-password/verify", forgotPasswordVerifyValidation, validate, verifyPasswordResetOtp);
-router.post("/forgot-password/reset", forgotPasswordResetValidation, validate, resetPasswordWithOtp);
+router.post("/forgot-password", forgotPasswordRequest);
+router.post("/reset-password", resetForgotPassword);
 router.get("/me", protect, me);
 router.get("/my-assigned-employees", protect, myAssignedEmployees);
 router.get("/active-cycle", protect, getActiveCycle);

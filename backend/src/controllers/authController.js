@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { OTP_PURPOSES, createOtpForUser, verifyOtpForUser, consumeOtp } from "../services/otpService.js";
 import { sendOtpEmail } from "../services/emailService.js";
 import { getCycleAccess } from "../services/cycleAccess.js";
+import { sendEmail, forgotPasswordMailgenContent } from "../services/mail.js";
 
 const tokenTtlMs = Number(process.env.JWT_EXPIRES_MS || 8 * 60 * 60 * 1000);
 const preAuthTtlSec = Number(process.env.PREAUTH_EXPIRES_IN_SECONDS || 5 * 60);
@@ -662,6 +663,90 @@ const getActiveCycle = async (req, res, next) => {
   }
 };
 
+const forgotPasswordRequest = async (req, res, next) => {
+  try {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Email is required" });
+
+    const user = await getUserByEmail(email);
+    if (!user) {
+      // Return a generic success to prevent email enumeration
+      return res.json({ message: "If the account exists, a reset link has been sent." });
+    }
+
+    // Generate token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins expiry
+
+    await pool.query(
+      "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
+      [user.user_id, tokenHash, expiresAt]
+    );
+
+    // Create Reset URL
+    // Assuming frontend runs on localhost:3000 during dev, but typically should use process.env.FRONTEND_URL
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    const userName = user.first_name ? `${user.first_name} ${user.last_name || ""}`.trim() : "User";
+    const emailContent = forgotPasswordMailgenContent(userName, resetUrl);
+
+    await sendEmail({
+      to: user.email,
+      subject: "Password Reset Request",
+      mailgenContent: emailContent
+    });
+
+    return res.json({ message: "If the account exists, a reset link has been sent." });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const resetForgotPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new password are required" });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
+    }
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Find the valid token
+    const { rows } = await pool.query(
+      "SELECT id, user_id FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > NOW() AND used_at IS NULL",
+      [tokenHash]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "Invalid or expired reset token" });
+    }
+
+    const { id: tokenId, user_id: userId } = rows[0];
+
+    // Hash the new password
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    // Update the user password
+    await pool.query(
+      "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE user_id = $2",
+      [hash, userId]
+    );
+
+    // Mark the token as used
+    await pool.query("UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1", [tokenId]);
+
+    return res.json({ message: "Password reset successful" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   login,
   logout,
@@ -672,6 +757,8 @@ export {
   requestPasswordResetOtp,
   verifyPasswordResetOtp,
   resetPasswordWithOtp,
+  forgotPasswordRequest,
+  resetForgotPassword,
   resendEmailVerificationOtp,
   verifyEmailOtp,
   getActiveCycle

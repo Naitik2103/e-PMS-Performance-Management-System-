@@ -11,7 +11,7 @@ const sendEmail = async (options) => {
     const emailPass = process.env.EMAIL_PASS;
     const smtpSecure = smtpPort == 465 ? true : false; // If the port is 465, then it is a secure connection, otherwise it is not a secure connection.
 
-    if(!smtpHost || !smtpPort || !emailUser || !emailPass) {
+    if (!smtpHost || !smtpPort || !emailUser || !emailPass) {
         console.error("SMTP configuration is missing. Please check your environment variables.");
         throw new Error("SMTP configuration is missing. Please check your environment variables.");
         return;
@@ -21,14 +21,14 @@ const sendEmail = async (options) => {
     const mailGenerator = new Mailgen({
         theme: "default",
         product: {
-            name: "Project Management Platform",
+            name: "e-Perfromance Management System",
             // link: "http://localhost:${process.env.PORT || 3000}"
             // link: "lwjdnjvcls"
             link: process.env.APP_URL || "http://localhost:3000"
         }
     })
 
-    const emailTextual= mailGenerator.generatePlaintext(options.mailgenContent);
+    const emailTextual = mailGenerator.generatePlaintext(options.mailgenContent);
     const emailHTML = mailGenerator.generate(options.mailgenContent);
 
     const transporter = nodemailer.createTransport({
@@ -36,14 +36,14 @@ const sendEmail = async (options) => {
         port: smtpPort,
         secure: smtpSecure, // true for 465, false for other ports
         auth: {
-            user: emailUser,   
+            user: emailUser,
             pass: emailPass
         }
     })
 
-    const mail ={
+    const mail = {
         from: emailUser,
-        to: options.to, 
+        to: options.to,
         subject: options.subject,
         text: emailTextual,
         html: emailHTML
@@ -53,29 +53,9 @@ const sendEmail = async (options) => {
         const info = await transporter.sendMail(mail);
         console.log("Email sent: " + info.response);
     } catch (error) {
-        console.error("Error sending email: " , error);
+        console.error("Error sending email: ", error);
     }
-    
-}
 
-
-//This is email verification email template content generator function. This function takes the username and the verification URL as parameters and returns the email content for the email verification email. We can use this function in the email verification controller to generate the email content for the email verification email and then send the email to the user using nodemailer or any other email sending service.
-const emailVerificationMailgenContent = (username, verifiationURL) => {
-    return {
-        body: {
-            name: username,
-            intro: "Welcome to our project management platform! We're excited to have you on board.",
-            action: {
-                instructions: "To get started with our project management platform, please click the button below to verify your email address:",
-                button: {
-                    text: "Verify Email",
-                    link: verifiationURL,
-                    colour: "#22BC66", // Optional action button color 
-                }
-            },
-            outro: "If you did not sign up for our project management platform, please ignore this email. If you have any questions, feel free to reply to this email. We're here to help!"
-        }
-    }
 }
 
 
@@ -84,7 +64,7 @@ const forgotPasswordMailgenContent = (username, passwordResetURL) => {
     return {
         body: {
             name: username,
-            intro: "We received a request to reset your password for your account on our project management platform. If you made this request, please click the button below to reset your password:",
+            intro: "We received a request to reset your password for your account on our e-PMS. If you made this request, please click the button below to reset your password:",
             action: {
                 instructions: "To reset your password, please click the button below:",
                 button: {
@@ -100,7 +80,6 @@ const forgotPasswordMailgenContent = (username, passwordResetURL) => {
 
 
 export {
-    emailVerificationMailgenContent,
     forgotPasswordMailgenContent,
-    sendEmail   
+    sendEmail
 }

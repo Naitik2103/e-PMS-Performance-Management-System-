@@ -34,6 +34,7 @@ export const adminNavItems = Object.freeze([
 export const appRoutes = Object.freeze([
   { path: "/", public: true },
   { path: "/login", public: true },
+  { path: "/reset-password", public: true },
   { path: "/select-role", public: true },
   { path: "/unauthorized", public: true },
 
