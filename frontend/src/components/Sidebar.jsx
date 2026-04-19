@@ -163,7 +163,7 @@ const Sidebar = ({ isOpen = false, onCloseMobile }) => {
                 ? `${label} is closed.`
                 : `${label} is not available.`;
           
-          if (item.key === "tracking") {
+          if (item.key === "tracking" || item.key === "reviews") {
             return (
               <NavLink
                 key={item.key}
@@ -231,11 +231,12 @@ const Sidebar = ({ isOpen = false, onCloseMobile }) => {
                 ? "Annual appraisal period is closed."
                 : "Annual appraisal period is not available.";
           return (
-            <div
+            <NavLink
               key={item.key}
-              className="sidebar-link"
-              style={{ opacity: 0.6, pointerEvents: "none" }}
-              title={msg}
+              to={target}
+              onClick={handleNavNavigate}
+              className={({ isActive }) => `sidebar-link${isActive ? " active" : ""}`}
+              style={{ opacity: 0.6 }}
             >
               <Icon size={18} className="sidebar-icon" />
               <div>
@@ -243,7 +244,7 @@ const Sidebar = ({ isOpen = false, onCloseMobile }) => {
                 <div style={{ fontSize: 12, color: "#8a8a8a", marginTop: 2 }}>{msg}</div>
               </div>
               <ChevronRight size={14} className="sidebar-chevron" />
-            </div>
+            </NavLink>
           );
         }
         return (

@@ -311,10 +311,10 @@ const Reviews = () => {
 
   useEffect(() => {
     // Show goals in parallel with self-summary form, without waiting for submit.
-    if (activeRole === ROLES.EMPLOYEE && isAnnualPeriodActive) {
+    if (activeRole === ROLES.EMPLOYEE) {
       loadYearEndGoals();
     }
-  }, [activeRole, isAnnualPeriodActive, activeCycleId]);
+  }, [activeRole, activeCycleId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -408,7 +408,7 @@ const Reviews = () => {
         </div>
       )}
 
-      {activeRole === ROLES.EMPLOYEE && isAnnualPeriodActive && (
+      {activeRole === ROLES.EMPLOYEE && (
         <div className="card annual-rating-card">
           <div className="card-header">
             <h2>Annual Goals</h2>
@@ -422,7 +422,7 @@ const Reviews = () => {
 
           <div className="annual-rating-list" role="list">
             {appraisalGoals.length === 0 && (
-              <div className="annual-rating-empty">No goals found for this cycle.</div>
+              <div className="annual-rating-empty">No goals, no progress, and no actual achievement found for this year.</div>
             )}
 
             {appraisalGoals.map((goal, index) => (
@@ -451,7 +451,7 @@ const Reviews = () => {
                       rows={3}
                       className="annual-rating-achievement"
                       value={achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? ""}
-                      disabled={isSelfAppraisalLocked}
+                      disabled={isSelfAppraisalLocked || !isAnnualPeriodActive}
                       onChange={(e) => {
                         const value = e.target.value;
                         setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: value }));
@@ -505,7 +505,7 @@ const Reviews = () => {
             ))}
           </div>
 
-          {!isSelfAppraisalLocked && allFinalAchievementsFilled && !isAnnualGoalsSubmitted && (
+          {!isSelfAppraisalLocked && isAnnualPeriodActive && allFinalAchievementsFilled && !isAnnualGoalsSubmitted && (
             <div className="action-row" style={{ marginTop: "20px" }}>
               <button className="btn" type="button" onClick={submitAnnualGoals}>
                 Submit Annual Goals
@@ -588,7 +588,7 @@ const Reviews = () => {
         </div>
       )}
 
-      {activeRole === ROLES.EMPLOYEE && isAnnualPeriodActive && (
+      {activeRole === ROLES.EMPLOYEE && (isAnnualPeriodActive || hasPersistedSelfSummary) && (
         <div className="card">
           <div className="card-header">
             <h2>Self Appraisal</h2>
@@ -601,7 +601,7 @@ const Reviews = () => {
                 <input
                   type="number"
                   value={selfForm.year}
-                  disabled={isSelfAppraisalLocked}
+                  disabled={isSelfAppraisalLocked || !isAnnualPeriodActive}
                   onChange={(e) => setSelfForm({ ...selfForm, year: Number(e.target.value) })}
                 />
               </div>
@@ -611,13 +611,13 @@ const Reviews = () => {
               <textarea
                 rows={5}
                 value={selfForm.selfSummary}
-                disabled={isSelfAppraisalLocked}
+                disabled={isSelfAppraisalLocked || !isAnnualPeriodActive}
                 onChange={(e) => setSelfForm({ ...selfForm, selfSummary: e.target.value })}
               />
             </div>
             {error && <div className="error-text">{error}</div>}
             <div className="action-row">
-              <button className="btn" type="button" disabled={isSelfAppraisalLocked || !String(selfForm.selfSummary || "").trim()} onClick={submitSelfSummary}>
+              <button className="btn" type="button" disabled={isSelfAppraisalLocked || !isAnnualPeriodActive || !String(selfForm.selfSummary || "").trim()} onClick={submitSelfSummary}>
                 {isSelfAppraisalLocked ? "Submitted" : "Submit Summary"}
               </button>
             </div>
