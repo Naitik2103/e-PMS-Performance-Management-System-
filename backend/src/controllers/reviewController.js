@@ -188,10 +188,12 @@ const upsertAttributeRatings = async ({ appraisalId, userId, role, ratings = [],
 };
 
 const ensureGoalRatings = async ({ appraisalId, goals = [], providedRatings = [], client = pool }) => {
+  if (!providedRatings || providedRatings.length === 0) return;
   const byGoal = new Map((providedRatings || []).map((r) => [r.goalId || r.goal_id || r.id, r]));
   for (const goal of goals) {
     const goalId = goal.goal_id || goal.id;
     const item = byGoal.get(goalId);
+    if (!item) continue;
     const id = crypto.randomUUID();
     await client.query(
       `
@@ -684,22 +686,21 @@ const submitSelfSummary = async (req, res, next) => {
     }
 
     const selfAppraisalTable = await resolveSelfAppraisalTable();
-    const existingSelfAppraisal = await pool.query(
-      `SELECT id FROM ${selfAppraisalTable} WHERE appraisal_id = $1 LIMIT 1`,
-      [dbAppraisal.id]
-    );
-    const selfAppraisalId = existingSelfAppraisal.rows[0]?.id || crypto.randomUUID();
     await pool.query(
       `
-      INSERT INTO ${selfAppraisalTable} (id, appraisal_id, employee_id, cycle_id, self_summary, status, submitted_at, updated_at)
-      VALUES ($1,$2,$3,$4,$5,'submitted',NOW(),NOW())
+      INSERT INTO ${selfAppraisalTable} (appraisal_id, employee_id, cycle_id, self_appraisal_summary, status, overall_rating, submitted_at, updated_at)
+      VALUES ($1,$2,$3,$4,'submitted',0,NOW(),NOW())
       ON CONFLICT (appraisal_id)
-      DO UPDATE SET self_summary = EXCLUDED.self_summary, status = 'submitted', submitted_at = NOW(), updated_at = NOW()
+      DO UPDATE SET self_appraisal_summary = EXCLUDED.self_appraisal_summary, status = 'submitted', submitted_at = NOW(), updated_at = NOW()
       `,
-      [selfAppraisalId, dbAppraisal.id, dbAppraisal.employee_id, dbAppraisal.cycle_id, String(selfSummary || "")]
+      [dbAppraisal.id, dbAppraisal.employee_id, dbAppraisal.cycle_id, String(selfSummary || "")]
     );
 
-    await ensureGoalRatings({ appraisalId: dbAppraisal.id, goals: goalsRes.rows, providedRatings: goalRatings || [] });
+    const selfAppraisalId = dbAppraisal.id;
+
+    if (goalRatings && goalRatings.length > 0) {
+      await ensureGoalRatings({ appraisalId: dbAppraisal.id, goals: goalsRes.rows, providedRatings: goalRatings || [] });
+    }
 
     await pool.query(
       "UPDATE appraisals SET status = 'self_appraisal_done', self_appraisal_submitted_at = NOW() WHERE id = $1",
@@ -1017,9 +1018,18 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
       [appraisal.id, employeeId, cycle.cycle_id]
     );
 
+    const selfAppraisalRecord = await getSelfAppraisalRecordForAppraisal({
+      appraisalId: appraisal.id,
+      employeeId,
+      cycleId: cycle.cycle_id
+    });
+
     return res.json({
       appraisalId: appraisal.id,
+      appraisalStatus: appraisal.status,
       cycleId: cycle.cycle_id,
+      selfSummary: selfAppraisalRecord?.summary || "",
+      persistedAchievementsComplete: true, // Legacy flag for frontend logic if needed
       goals: goalsRes.rows.map((g) => ({
         id: g.goal_id,
         goalTitle: g.goal_title,
