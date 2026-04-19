@@ -20,7 +20,7 @@ const features = [
   },
   {
     icon: "📊",
-    title: "Six-Month Tracking",
+    title: "Six-Month Progress",
     desc: "Record employee progress in the six-month review with detailed per-KPA progress updates.",
   },
   {
@@ -39,7 +39,7 @@ const steps = [
   { num: "01", label: "Set Annual Goals", sub: "Employee sets KPAs" },
   { num: "02", label: "Manager Approval", sub: "RO & RevO approve" },
   { num: "03", label: "Track Progress", sub: "Six-month review updates" },
-  { num: "04", label: "Year-End Review", sub: "Self-summary & rating" },
+  { num: "04", label: "Year-End Appraisal", sub: "Self-summary & rating" },
   { num: "05", label: "Final Acceptance", sub: "Accepting Officer signs off" },
 ];
 

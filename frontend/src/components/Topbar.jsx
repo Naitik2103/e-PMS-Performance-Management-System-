@@ -21,8 +21,8 @@ const pageTitles = {
   "/admin/all-users": "All Users",
   "/admin/hierarchy": "Reporting Hierarchy",
   "/goals": "Annual Goal Setting",
-  "/tracking": "Six-Month Tracking",
-  "/reviews": "Year-End Reviews",
+  "/tracking": "Six-Month Progress",
+  "/reviews": "Year-End Appraisal",
 };
 
 const Topbar = () => {

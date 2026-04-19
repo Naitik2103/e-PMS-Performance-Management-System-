@@ -74,14 +74,14 @@ export const sidebarItems = Object.freeze([
     key: "tracking",
     to: "/tracking",
     icon: BarChart2,
-    label: "Six-Month Tracking",
+    label: "Six-Month Progress",
     roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER],
   },
   {
     key: "reviews",
     to: "/reviews",
     icon: ClipboardList,
-    label: "Year-End Reviews",
+    label: "Year-End Appraisal",
     roles: [ROLES.EMPLOYEE, ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER],
   },
   {

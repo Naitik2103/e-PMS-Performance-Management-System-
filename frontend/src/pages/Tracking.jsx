@@ -124,7 +124,7 @@ const Tracking = () => {
       {user?.role === ROLES.EMPLOYEE && isSixMonthPeriodActive && availableGoals.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <h2>Submit Six-Month Tracking</h2>
+            <h2>Submit Six-Month Progress</h2>
           </div>
           <div className="form-grid">
             <div>
