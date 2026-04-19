@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import StatusBadge from "../components/StatusBadge";
-import { ROLES } from "../constants/rbac";
+import { ROLES, roleMatches } from "../constants/rbac";
 import { isAnnualAppraisalPeriodActive, formatDateDisplay } from "../utils/periodVisibility";
 
 const Reviews = () => {
@@ -26,6 +26,8 @@ const Reviews = () => {
   const [selectedReview, setSelectedReview] = useState(null);
   const [selectedReviewGoals, setSelectedReviewGoals] = useState([]);
   const [selectedReviewInputs, setSelectedReviewInputs] = useState({});
+  const [attributeMasters, setAttributeMasters] = useState([]);
+  const [selectedReviewAttributeInputs, setSelectedReviewAttributeInputs] = useState({});
   const [selectedReviewLoading, setSelectedReviewLoading] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [selectedEmployeeName, setSelectedEmployeeName] = useState("");
@@ -88,13 +90,21 @@ const Reviews = () => {
 
   const selectedReviewComplete = useMemo(() => {
     if (!selectedReviewStage || !selectedReviewGoals.length) return false;
-    return selectedReviewGoals.every((goal) => {
+    const goalsDone = selectedReviewGoals.every((goal) => {
       const current = selectedReviewInputs[goal.id] || {};
       const rating = Number(current.rating ?? goal[selectedReviewStage.ratingKey] ?? 0);
       const remarks = String(current.remarks ?? goal[selectedReviewStage.remarksKey] ?? "").trim();
       return rating >= 1 && rating <= 5 && remarks.length > 0;
     });
-  }, [selectedReviewStage, selectedReviewGoals, selectedReviewInputs]);
+
+    const attrsDone = attributeMasters.length === 0 || attributeMasters.every(attr => {
+      const current = selectedReviewAttributeInputs[attr.id] || {};
+      const rating = Number(current.rating || 0);
+      return rating >= 1 && rating <= 5;
+    });
+
+    return goalsDone && attrsDone;
+  }, [selectedReviewStage, selectedReviewGoals, selectedReviewInputs, attributeMasters, selectedReviewAttributeInputs]);
 
   const visibleReviews = useMemo(() => {
     let filtered = reviews;
@@ -110,6 +120,20 @@ const Reviews = () => {
   useEffect(() => {
     setIsAnnualPeriodActive(isAnnualAppraisalPeriodActive(activeCycle));
   }, [activeCycle]);
+
+  useEffect(() => {
+    const fetchAttributes = async () => {
+      try {
+        const res = await apiClient.get("/reviews/attributes/master");
+        setAttributeMasters(res.data || []);
+      } catch (err) {
+        console.error("Failed to fetch attribute masters", err);
+      }
+    };
+    if (user) {
+      fetchAttributes();
+    }
+  }, [user]);
 
   const loadReviews = async () => {
     try {
@@ -180,6 +204,21 @@ const Reviews = () => {
         return acc;
       }, {});
       setSelectedReviewInputs(initialInputs);
+
+      const attrRatings = response.data?.attributeRatings || [];
+      const attrInputs = {};
+      const currentRoleKey = response.data?.stage;
+
+      attributeMasters.forEach(attr => {
+        const existing = attrRatings.find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === String(currentRoleKey));
+        attrInputs[attr.id] = {
+          rating: existing ? existing.rating : "",
+          category: attr.category,
+          attributeKey: attr.attributeName
+        };
+      });
+      setSelectedReviewAttributeInputs(attrInputs);
+      setSelectedReview(prev => ({ ...prev, attributeRatings: attrRatings }));
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Unable to load review goals");
     } finally {
@@ -200,9 +239,20 @@ const Reviews = () => {
         };
       });
 
+      const attributeRatingsPayload = attributeMasters.map(attr => {
+        const current = selectedReviewAttributeInputs[attr.id] || {};
+        return {
+          attributeId: attr.id,
+          rating: Number(current.rating || 0),
+          category: attr.category,
+          attributeKey: attr.attributeName
+        };
+      });
+
       await apiClient.post("/reviews/goal-stage-submit", {
         appraisalId: selectedReview.id,
-        goalRatings
+        goalRatings,
+        attributeRatings: attributeRatingsPayload
       });
 
       setSelectedReview(null);
@@ -718,6 +768,110 @@ const Reviews = () => {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Quantitative Attributes UI */}
+                {attributeMasters.length > 0 && ["self_appraisal_done", "ro_rated", "revo_rated", "ao_accepted", "completed"].includes((selectedReview?.status || "").toLowerCase()) && (
+                  <div style={{ marginTop: "30px" }}>
+                    <h3>Quantitative Attributes</h3>
+                    {[...new Set(attributeMasters.map(a => a.category))].map(cat => {
+                      const catAttrs = attributeMasters.filter(a => a.category === cat);
+                      
+                      const calculateLiveAverage = (category) => {
+                        let sum = 0;
+                        let count = 0;
+                        attributeMasters.filter(a => a.category === category).forEach(attr => {
+                          const val = Number(selectedReviewAttributeInputs[attr.id]?.rating || 0);
+                          if (val > 0) { sum += val; count++; }
+                        });
+                        return count > 0 ? (sum / count).toFixed(2) : "0.00";
+                      };
+
+                      return (
+                        <div key={cat} style={{ marginBottom: "20px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f5f5f5", padding: "10px", borderRadius: "4px" }}>
+                            <h4 style={{ margin: 0 }}>{cat}</h4>
+                            <strong style={{ color: "#1976d2" }}>Section Average: {calculateLiveAverage(cat)}</strong>
+                          </div>
+                          <table className="table" style={{ marginTop: "10px" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: "25%" }}>Attribute</th>
+                                <th style={{ width: "40%" }}>Description</th>
+                                <th>RO Rating</th>
+                                <th>Reviewing Rating</th>
+                                <th>Accepting Rating</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {catAttrs.map(attr => {
+                                const current = selectedReviewAttributeInputs[attr.id] || {};
+                                const canEdit = Boolean(selectedReviewStage && selectedReview?.canEdit);
+                                const isRo = selectedReviewStage?.ratingKey === "roRating";
+                                const isRevo = selectedReviewStage?.ratingKey === "revoRating";
+                                const isAo = selectedReviewStage?.ratingKey === "aoRating";
+
+                                const getRoleRating = (roleKey) => {
+                                  const existing = (selectedReview.attributeRatings || []).find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === String(roleKey));
+                                  return existing ? existing.rating : "-";
+                                };
+
+                                return (
+                                  <tr key={attr.id}>
+                                    <td><strong>{attr.attributeName}</strong></td>
+                                    <td style={{ fontSize: "13px", color: "#666" }}>{attr.description}</td>
+                                    <td>
+                                      {canEdit && isRo ? (
+                                        <select
+                                          value={current.rating}
+                                          onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
+                                            ...prev,
+                                            [attr.id]: { ...prev[attr.id], rating: e.target.value }
+                                          }))}
+                                        >
+                                          <option value="">Select</option>
+                                          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                                        </select>
+                                      ) : getRoleRating(ROLES.REPORTING_OFFICER)}
+                                    </td>
+                                    <td>
+                                      {canEdit && isRevo ? (
+                                        <select
+                                          value={current.rating}
+                                          onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
+                                            ...prev,
+                                            [attr.id]: { ...prev[attr.id], rating: e.target.value }
+                                          }))}
+                                        >
+                                          <option value="">Select</option>
+                                          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                                        </select>
+                                      ) : getRoleRating(ROLES.REVIEWING_OFFICER)}
+                                    </td>
+                                    <td>
+                                      {canEdit && isAo ? (
+                                        <select
+                                          value={current.rating}
+                                          onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
+                                            ...prev,
+                                            [attr.id]: { ...prev[attr.id], rating: e.target.value }
+                                          }))}
+                                        >
+                                          <option value="">Select</option>
+                                          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                                        </select>
+                                      ) : getRoleRating(ROLES.ACCEPTING_OFFICER)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {selectedReviewStage && selectedReview?.canEdit && (
                   <div className="action-row" style={{ marginTop: "16px" }}>
                     <button className="btn" type="button" disabled={!selectedReviewComplete} onClick={submitSelectedReview}>
@@ -727,7 +881,7 @@ const Reviews = () => {
                 )}
                 {selectedReviewStage && selectedReview?.canEdit && !selectedReviewComplete && (
                   <div className="muted" style={{ marginTop: "10px" }}>
-                    Fill a rating and remarks for every goal before submitting.
+                    Fill a rating and remarks for every goal, and rate every quantitative attribute (1-5) before submitting.
                   </div>
                 )}
               </>

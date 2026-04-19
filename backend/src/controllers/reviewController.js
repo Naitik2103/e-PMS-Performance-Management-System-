@@ -172,18 +172,30 @@ const ensureAppraisal = async (employeeId, cycleId) => {
 
 const upsertAttributeRatings = async ({ appraisalId, userId, role, ratings = [], client = pool }) => {
   for (const item of ratings) {
-    const id = crypto.randomUUID();
-    await client.query(
-      `
-      INSERT INTO quantitative_attribute_ratings
-        (id, appraisal_id, attribute_id, rated_by, rated_by_role, rating, remarks, created_at, updated_at)
-      VALUES
-        ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW())
-      ON CONFLICT (appraisal_id, attribute_id, rated_by_role)
-      DO UPDATE SET rating = EXCLUDED.rating, remarks = EXCLUDED.remarks, rated_by = EXCLUDED.rated_by, updated_at = NOW()
-      `,
-      [id, appraisalId, item.attributeId, userId, role, Number(item.rating), item.remarks || null]
+    const existing = await client.query(
+      `SELECT attribute_rating_id FROM quantitative_attribute_rating WHERE appraisal_id = $1 AND attribute_id = $2 AND rater_role = $3 LIMIT 1`,
+      [appraisalId, item.attributeId, role]
     );
+
+    if (existing.rows.length > 0) {
+      await client.query(
+        `UPDATE quantitative_attribute_rating
+         SET rating = $1, rater_id = $2, category = COALESCE($3, category), attribute_key = COALESCE($4, attribute_key), updated_at = NOW()
+         WHERE attribute_rating_id = $5`,
+        [Number(item.rating), userId, item.category || null, item.attributeKey || null, existing.rows[0].attribute_rating_id]
+      );
+    } else {
+      const id = crypto.randomUUID();
+      await client.query(
+        `
+        INSERT INTO quantitative_attribute_rating
+          (attribute_rating_id, appraisal_id, attribute_id, rater_id, rater_role, rating, category, attribute_key, created_at, updated_at)
+        VALUES
+          ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
+        `,
+        [id, appraisalId, item.attributeId, userId, role, Number(item.rating), item.category || null, item.attributeKey || null]
+      );
+    }
   }
 };
 
@@ -251,7 +263,7 @@ const getGoalReviewStage = (status) => {
 
 const submitGoalStageRatings = async (req, res, next) => {
   try {
-    const { appraisalId, goalRatings = [], summaryRemarks = "" } = req.body;
+    const { appraisalId, goalRatings = [], attributeRatings = [], summaryRemarks = "" } = req.body;
     await ensureReviewSchema();
 
     const appRes = await pool.query("SELECT * FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
@@ -308,6 +320,37 @@ const submitGoalStageRatings = async (req, res, next) => {
       });
     }
 
+    const attrRows = await pool.query("SELECT attribute_id as id, attr_category as category, attribute_name FROM quantitative_attributes_master WHERE is_active = true");
+    const expectedAttrIds = attrRows.rows.map((row) => String(row.id));
+    
+    const attrMap = new Map(
+      (Array.isArray(attributeRatings) ? attributeRatings : []).map((item) => [String(item.attributeId || item.id), item])
+    );
+
+    const missingAttrIds = [];
+    const normalizedAttrRatings = [];
+    for (const attrId of expectedAttrIds) {
+      const item = attrMap.get(attrId);
+      const rating = Number(item?.rating || 0);
+      if (!rating || rating < 1 || rating > 5) {
+        missingAttrIds.push(attrId);
+        continue;
+      }
+      normalizedAttrRatings.push({ 
+        attributeId: attrId, 
+        rating, 
+        category: item?.category, 
+        attributeKey: item?.attributeKey 
+      });
+    }
+
+    if (missingAttrIds.length > 0) {
+      return res.status(400).json({
+        error: "Each quantitative attribute must be rated from 1 to 5 before submission",
+        missingAttrIds
+      });
+    }
+
     for (const item of normalizedRatings) {
       const id = crypto.randomUUID();
       await pool.query(
@@ -320,6 +363,13 @@ const submitGoalStageRatings = async (req, res, next) => {
         [id, appraisalId, item.goalId, item.rating, item.remarks]
       );
     }
+
+    await upsertAttributeRatings({
+      appraisalId,
+      userId: req.user.userId,
+      role: stage.role,
+      ratings: normalizedAttrRatings
+    });
 
     const nextStatus = stage.nextStatus;
     await updateAppraisalStage({
@@ -1206,7 +1256,7 @@ const listAttributeMasters = async (req, res, next) => {
   try {
     await ensureReviewSchema();
     const { rows } = await pool.query(
-      "SELECT id, category, attribute_name, description FROM quantitative_attributes_master WHERE is_active = true ORDER BY category ASC, attribute_name ASC"
+      "SELECT attribute_id as id, attr_category as category, attribute_name, description FROM quantitative_attributes_master WHERE is_active = true ORDER BY attr_category ASC, attribute_name ASC"
     );
     const out = rows.map((r) => ({
       id: r.id,
@@ -1403,6 +1453,11 @@ const getAppraisalGoalsWithRatings = async (req, res, next) => {
       [appraisalId, appraisal.employee_id, appraisal.cycle_id]
     );
 
+    const attributeRatingsRes = await pool.query(
+      "SELECT attribute_id, rater_role, rating, category, attribute_key, created_at FROM quantitative_attribute_rating WHERE appraisal_id = $1 ORDER BY created_at ASC",
+      [appraisalId]
+    );
+
     return res.json({
       appraisal: {
         id: appraisal.id,
@@ -1433,6 +1488,13 @@ const getAppraisalGoalsWithRatings = async (req, res, next) => {
         revoRemarks: g.revoRemarks ?? g.revo_remarks ?? g.revoremarks,
         aoRating: g.aoRating ?? g.ao_rating ?? g.aorating,
         aoRemarks: g.aoRemarks ?? g.ao_remarks ?? g.aoremarks
+      })),
+      attributeRatings: attributeRatingsRes.rows.map(r => ({
+        attributeId: r.attribute_id,
+        ratedByRole: r.rater_role,
+        rating: r.rating,
+        category: r.category,
+        attributeKey: r.attribute_key
       }))
     });
   } catch (error) {
