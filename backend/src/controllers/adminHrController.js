@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
 import { ROLES, normalizeRole } from "../constants/rbac.js";
 import { writeAudit } from "../services/auditService.js";
+import { sendEmail, userCreationMailgenContent } from "../services/mail.js";
 
 const buildFullName = (firstName, lastName) =>
   [String(firstName || "").trim(), String(lastName || "").trim()].filter(Boolean).join(" ").trim();
@@ -199,6 +200,18 @@ const createHrUser = async (req, res, next) => {
     });
 
     const dept = await pool.query(`SELECT name FROM departments WHERE id = $1`, [row.department_id]);
+
+    // Send the welcome email with credentials
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const loginUrl = `${frontendUrl}/login`;
+    const emailContent = userCreationMailgenContent(row.full_name || "User", row.email, temporaryPassword, loginUrl);
+    
+    // Fire and forget (do not await so it doesn't block the API response unnecessarily)
+    sendEmail({
+      to: row.email,
+      subject: "Your e-PMS Account Has Been Created",
+      mailgenContent: emailContent
+    }).catch(err => console.error("Failed to send welcome email:", err));
 
     return res.status(201).json({
       id: row.user_id,
