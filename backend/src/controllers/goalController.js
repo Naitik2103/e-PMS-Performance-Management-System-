@@ -109,7 +109,7 @@ const updateGoal = async (req, res, next) => {
   try {
     const { id } = req.params;
     const r = await pool.query(
-      "SELECT goal_id, status FROM goals WHERE goal_id = $1 AND user_id = $2 LIMIT 1",
+      "SELECT goal_id, status, goal_title, goal_description, weightage FROM goals WHERE goal_id = $1 AND user_id = $2 LIMIT 1",
       [id, req.user.id]
     );
     const goal = r.rows[0];
@@ -144,10 +144,26 @@ const updateGoal = async (req, res, next) => {
       });
     }
 
+    if (goal.status === "returned") {
+      const incomingTitle = String(req.body.goalTitle || "").trim();
+      const incomingDesc = String(req.body.goalDescription || "").trim();
+      const incomingWeightage = Number(req.body.weightage);
+
+      const isUnchanged =
+        goal.goal_title === incomingTitle &&
+        (goal.goal_description || "") === incomingDesc &&
+        Number(goal.weightage) === incomingWeightage;
+
+      if (isUnchanged) {
+        res.status(400);
+        return next(new Error("You must modify the returned goal (change title, KPI, or weightage) before saving."));
+      }
+    }
+
     await pool.query(
       `
       UPDATE goals
-      SET goal_title = $1, goal_description = $2, weightage = $3, updated_at = NOW()
+      SET goal_title = $1, goal_description = $2, weightage = $3, status = 'draft', updated_at = NOW()
       WHERE goal_id = $4 AND user_id = $5
       `,
       [req.body.goalTitle, req.body.goalDescription || null, Number(req.body.weightage), id, req.user.id]
@@ -225,12 +241,18 @@ const submitCycleGoals = async (req, res, next) => {
     }
 
     const goals = await pool.query(
-      "SELECT goal_id, weightage FROM goals WHERE user_id = $1 AND cycle_id = $2",
+      "SELECT goal_id, weightage, status FROM goals WHERE user_id = $1 AND cycle_id = $2",
       [req.user.id, cycle.cycle_id]
     );
     if (!goals.rows.length) {
       res.status(400);
       return next(new Error("No goals found to submit"));
+    }
+
+    const hasUneditedReturnedGoals = goals.rows.some((g) => g.status === "returned");
+    if (hasUneditedReturnedGoals) {
+      res.status(400);
+      return next(new Error("You have returned goals that have not been modified. Please edit and update them before resubmitting."));
     }
 
     const totalWeight = goals.rows.reduce((sum, g) => sum + toNumber(g.weightage), 0);
