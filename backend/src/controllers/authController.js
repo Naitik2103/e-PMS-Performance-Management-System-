@@ -109,7 +109,6 @@ const getActiveCycleWithDates = async () => {
 
 const getAvailableRolesForActiveCycle = async (userId, primaryRole) => {
   const normalizedPrimary = normalizeRole(primaryRole);
-  if (normalizedPrimary === ROLES.HR_ADMIN) return [ROLES.HR_ADMIN];
 
   const available = new Set([ROLES.EMPLOYEE]);
   if (normalizedPrimary && normalizedPrimary !== ROLES.EMPLOYEE) {
@@ -199,17 +198,6 @@ const login = async (req, res, next) => {
     }
 
     const primary = normalizeRole(user.role);
-    if (primary === ROLES.HR_ADMIN) {
-      const availableRoles = [ROLES.HR_ADMIN];
-      const tokenId = crypto.randomUUID();
-      const token = generateAuthToken({ user, tokenId, selectedRole: ROLES.HR_ADMIN, availableRoles });
-      await pool.query("INSERT INTO auth_sessions (user_id, token_id, expires_at) VALUES ($1, $2, $3)", [
-        user.user_id,
-        tokenId,
-        new Date(Date.now() + tokenTtlMs)
-      ]);
-      return res.json({ token, user: mapUserResponse({ user, selectedRole: ROLES.HR_ADMIN, availableRoles }) });
-    }
 
     const availableRoles = await getAvailableRolesForActiveCycle(user.user_id, user.role);
     const tokenId = crypto.randomUUID();
