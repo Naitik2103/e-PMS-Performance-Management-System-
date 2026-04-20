@@ -161,52 +161,52 @@ const updateGoal = async (req, res, next) => {
   }
 };
 
-  const deleteGoal = async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const r = await pool.query(
-        "SELECT goal_id, status FROM goals WHERE goal_id = $1 AND user_id = $2 LIMIT 1",
-        [id, req.user.id]
-      );
-      const goal = r.rows[0];
-      if (!goal) {
-        res.status(404);
-        return next(new Error("Goal not found"));
-      }
-      if (!["draft", "returned"].includes(goal.status)) {
-        res.status(400);
-        return next(new Error("Goal cannot be deleted at this stage"));
-      }
-      const c = await pool.query(
-        `
+const deleteGoal = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const r = await pool.query(
+      "SELECT goal_id, status FROM goals WHERE goal_id = $1 AND user_id = $2 LIMIT 1",
+      [id, req.user.id]
+    );
+    const goal = r.rows[0];
+    if (!goal) {
+      res.status(404);
+      return next(new Error("Goal not found"));
+    }
+    if (!["draft", "returned"].includes(goal.status)) {
+      res.status(400);
+      return next(new Error("Goal cannot be deleted at this stage"));
+    }
+    const c = await pool.query(
+      `
         SELECT c.*
         FROM goals g
         JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
         WHERE g.goal_id = $1
         LIMIT 1
         `,
-        [id]
-      );
-      const cycle = c.rows[0] || null;
-      if (!cycle) {
-        res.status(400);
-        return next(new Error("Appraisal cycle not found"));
-      }
-      if (req.user.role === ROLES.EMPLOYEE) {
-        assertCycleWindowOpen({
-          cycle,
-          windowKey: "goalSettingOpen",
-          message: "Goal setting is not open for the current date."
-        });
-      }
-
-      await pool.query("DELETE FROM goals WHERE goal_id = $1 AND user_id = $2", [id, req.user.id]);
-      await writeAudit({ user: req.user, action: "delete", entity: "goal", entityId: id });
-      return res.json({ message: "Goal deleted successfully" });
-    } catch (error) {
-      return next(error);
+      [id]
+    );
+    const cycle = c.rows[0] || null;
+    if (!cycle) {
+      res.status(400);
+      return next(new Error("Appraisal cycle not found"));
     }
-  };
+    if (req.user.role === ROLES.EMPLOYEE) {
+      assertCycleWindowOpen({
+        cycle,
+        windowKey: "goalSettingOpen",
+        message: "Goal setting is not open for the current date."
+      });
+    }
+
+    await pool.query("DELETE FROM goals WHERE goal_id = $1 AND user_id = $2", [id, req.user.id]);
+    await writeAudit({ user: req.user, action: "delete", entity: "goal", entityId: id });
+    return res.json({ message: "Goal deleted successfully" });
+  } catch (error) {
+    return next(error);
+  }
+};
 
 const submitCycleGoals = async (req, res, next) => {
   try {
@@ -292,7 +292,9 @@ const listMyGoals = async (req, res, next) => {
         g.status,
         g.cycle_id,
         c.cycle_name,
-        c.cycle_year
+        c.cycle_year,
+        (SELECT reason FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_reason,
+        (SELECT sent_back_role FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_role
       FROM goals g
       LEFT JOIN appraisal_cycles c ON c.cycle_id = g.cycle_id
       WHERE g.user_id = $1
@@ -307,6 +309,8 @@ const listMyGoals = async (req, res, next) => {
       goalDescription: g.goal_description,
       weightage: g.weightage,
       status: g.status,
+      returnReason: g.return_reason || null,
+      returnRole: g.return_role || null,
       cycleId: g.cycle_id,
       cycle: g.cycle_id
         ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) }
@@ -387,6 +391,8 @@ const listGoalsForRO = async (req, res, next) => {
         g.cycle_id,
         c.cycle_name,
         c.cycle_year,
+        (SELECT reason FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_reason,
+        (SELECT sent_back_role FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_role,
         u.user_id,
         u.first_name,
         u.last_name,
@@ -409,6 +415,8 @@ const listGoalsForRO = async (req, res, next) => {
       goalDescription: g.goal_description,
       weightage: g.weightage,
       status: g.status,
+      returnReason: g.return_reason || null,
+      returnRole: g.return_role || null,
       cycleId: g.cycle_id,
       cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
       employee: { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
@@ -437,6 +445,8 @@ const listGoalsForROEmployee = async (req, res, next) => {
         g.cycle_id,
         c.cycle_name,
         c.cycle_year,
+        (SELECT reason FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_reason,
+        (SELECT sent_back_role FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_role,
         u.user_id,
         u.first_name,
         u.last_name,
@@ -462,6 +472,8 @@ const listGoalsForROEmployee = async (req, res, next) => {
       goalDescription: g.goal_description,
       weightage: g.weightage,
       status: g.status,
+      returnReason: g.return_reason || null,
+      returnRole: g.return_role || null,
       cycleId: g.cycle_id,
       cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
       employee: { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
@@ -476,11 +488,11 @@ const listGoalsForReviewing = async (req, res, next) => {
   try {
     const selectedEmployeeId = req.query?.employeeId ? String(req.query.employeeId) : null;
     const params = [req.user.id];
-    let whereClause = "WHERE p.reviewing_officer_id = $1 AND g.status IN ('ro_approved', 'approved')";
+    let whereClause = "WHERE p.reviewing_officer_id = $1 AND (g.status IN ('ro_approved', 'approved') OR (g.status = 'returned' AND (SELECT sent_back_role FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) = 'reviewing_officer'))";
 
     if (selectedEmployeeId) {
       params.push(selectedEmployeeId);
-      whereClause = "WHERE g.user_id = $2 AND p.reviewing_officer_id = $1 AND g.status IN ('ro_approved', 'approved')";
+      whereClause = "WHERE g.user_id = $2 AND p.reviewing_officer_id = $1 AND (g.status IN ('ro_approved', 'approved') OR (g.status = 'returned' AND (SELECT sent_back_role FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) = 'reviewing_officer'))";
     }
 
     const { rows } = await pool.query(
@@ -494,6 +506,8 @@ const listGoalsForReviewing = async (req, res, next) => {
         g.cycle_id,
         c.cycle_name,
         c.cycle_year,
+        (SELECT reason FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_reason,
+        (SELECT sent_back_role FROM kpa_sendback_history h WHERE h.goal_id = g.goal_id ORDER BY iteration_number DESC LIMIT 1) AS return_role,
         u.user_id,
         u.first_name,
         u.last_name,
@@ -515,6 +529,8 @@ const listGoalsForReviewing = async (req, res, next) => {
       goalDescription: g.goal_description,
       weightage: g.weightage,
       status: g.status,
+      returnReason: g.return_reason || null,
+      returnRole: g.return_role || null,
       cycleId: g.cycle_id,
       cycle: g.cycle_id ? { id: g.cycle_id, name: g.cycle_name, year: Number(g.cycle_year) } : null,
       employee: { id: g.user_id, name: `${g.first_name || ""} ${g.last_name || ""}`.trim() || g.email, department: g.department }
@@ -583,6 +599,12 @@ const approveGoalByRO = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { remarks, decision = "approve" } = req.body;
+
+    if (decision === "return" && (!remarks || !String(remarks).trim())) {
+      res.status(400);
+      return next(new Error("Remarks are mandatory when returning a goal"));
+    }
+
     const goalRes = await pool.query("SELECT goal_id, user_id, status, goal_title, cycle_id, appraisal_id FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
     const goal = goalRes.rows[0];
     if (!goal) {
@@ -653,6 +675,12 @@ const approveGoalByReviewing = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { remarks, decision = "approve" } = req.body;
+
+    if (decision === "return" && (!remarks || !String(remarks).trim())) {
+      res.status(400);
+      return next(new Error("Remarks are mandatory when returning a goal"));
+    }
+
     const goalRes = await pool.query("SELECT goal_id, user_id, status, cycle_id, goal_title, appraisal_id FROM goals WHERE goal_id = $1 LIMIT 1", [id]);
     const goal = goalRes.rows[0];
     if (!goal) {
@@ -848,7 +876,7 @@ const sendbackGoalsByAppraisalId = async (req, res, next) => {
 export {
   createGoal,
   updateGoal,
-    deleteGoal,
+  deleteGoal,
   submitCycleGoals,
   listMyGoals,
   listAllGoals,

@@ -14,6 +14,8 @@ const Goals = () => {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [focusedGoalId, setFocusedGoalId] = useState("");
+  const [returningGoalId, setReturningGoalId] = useState(null);
+  const [returnRemark, setReturnRemark] = useState("");
   const [isGoalPeriodActive, setIsGoalPeriodActive] = useState(false);
   const goalRowRefs = useRef(new Map());
   const activeRole = user?.selectedRole || user?.role;
@@ -206,10 +208,12 @@ const Goals = () => {
     }
   };
 
-  const handleApprove = async (goalId, type, decision = "approve") => {
+  const handleApprove = async (goalId, type, decision = "approve", remarks = "") => {
     try {
-      await apiClient.post(`/goals/${goalId}/approve/${type}`, { decision });
+      await apiClient.post(`/goals/${goalId}/approve/${type}`, { decision, remarks });
       loadGoals();
+      setReturningGoalId(null);
+      setReturnRemark("");
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Unable to process goal action");
     }
@@ -325,26 +329,48 @@ const Goals = () => {
                         <div className="muted" style={{ fontSize: "12px", marginTop: 4 }}>
                           KPI: {goal.goalDescription || "-"}
                         </div>
+                        {goal.status === "returned" && goal.returnReason && (
+                          <div style={{ marginTop: "8px", padding: "8px", backgroundColor: "#fff4e5", borderLeft: "4px solid #ff9800", fontSize: "12px", color: "#663c00", borderRadius: "4px" }}>
+                            <strong style={{ display: "block", marginBottom: "4px" }}>Returned by {goal.returnRole === "reporting_officer" ? "Reporting Officer" : "Reviewing Officer"}:</strong>
+                            {goal.returnReason}
+                          </div>
+                        )}
                       </td>
                       <td>{Number(goal.weightage).toFixed(2)}</td>
                       <td><StatusBadge status={goal.status} /></td>
                       <td>
-                          {canTakeGoalAction && (
-                            <div className="table-actions">
-                              {activeRole === ROLES.REPORTING_OFFICER && goal.status === "submitted" && (
-                                <>
+                        {canTakeGoalAction && (
+                          <div className="table-actions" style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
+                            {activeRole === ROLES.REPORTING_OFFICER && goal.status === "submitted" && (
+                              returningGoalId === goal.id ? (
+                                <div style={{ display: "flex", gap: "8px", width: "100%", maxWidth: "300px" }}>
+                                  <input type="text" className="input" placeholder="Reason for return..." value={returnRemark} onChange={(e) => setReturnRemark(e.target.value)} style={{ flex: 1, padding: "6px" }} />
+                                  <button className="btn" type="button" style={{ padding: "6px 12px" }} onClick={() => handleApprove(goal.id, "ro", "return", returnRemark)}>Confirm</button>
+                                  <button className="btn ghost" type="button" style={{ padding: "6px 12px" }} onClick={() => { setReturningGoalId(null); setReturnRemark(""); }}>Cancel</button>
+                                </div>
+                              ) : (
+                                <div style={{ display: "flex", gap: "8px" }}>
                                   <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
-                                  <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
-                                </>
-                              )}
-                              {activeRole === ROLES.REVIEWING_OFFICER && goal.status === "ro_approved" && (
-                                <>
+                                  <button className="btn ghost" type="button" onClick={() => { setReturningGoalId(goal.id); setReturnRemark(""); }}>Return</button>
+                                </div>
+                              )
+                            )}
+                            {activeRole === ROLES.REVIEWING_OFFICER && goal.status === "ro_approved" && (
+                              returningGoalId === goal.id ? (
+                                <div style={{ display: "flex", gap: "8px", width: "100%", maxWidth: "300px" }}>
+                                  <input type="text" className="input" placeholder="Reason for return..." value={returnRemark} onChange={(e) => setReturnRemark(e.target.value)} style={{ flex: 1, padding: "6px" }} />
+                                  <button className="btn" type="button" style={{ padding: "6px 12px" }} onClick={() => handleApprove(goal.id, "review", "return", returnRemark)}>Confirm</button>
+                                  <button className="btn ghost" type="button" style={{ padding: "6px 12px" }} onClick={() => { setReturningGoalId(null); setReturnRemark(""); }}>Cancel</button>
+                                </div>
+                              ) : (
+                                <div style={{ display: "flex", gap: "8px" }}>
                                   <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
-                                  <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
-                                </>
-                              )}
-                            </div>
-                          )}
+                                  <button className="btn ghost" type="button" onClick={() => { setReturningGoalId(goal.id); setReturnRemark(""); }}>Return</button>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -369,6 +395,12 @@ const Goals = () => {
                     <div className="muted" style={{ fontSize: "12px", marginTop: 4 }}>
                       KPI: {goal.goalDescription || "-"}
                     </div>
+                    {goal.status === "returned" && goal.returnReason && (
+                      <div style={{ marginTop: "8px", padding: "8px", backgroundColor: "#fff4e5", borderLeft: "4px solid #ff9800", fontSize: "12px", color: "#663c00", borderRadius: "4px" }}>
+                        <strong style={{ display: "block", marginBottom: "4px" }}>Returned by {goal.returnRole === "reporting_officer" ? "Reporting Officer" : "Reviewing Officer"}:</strong>
+                        {goal.returnReason}
+                      </div>
+                    )}
                   </td>
                   <td>{Number(goal.weightage).toFixed(2)}</td>
                   <td><StatusBadge status={goal.status} /></td>

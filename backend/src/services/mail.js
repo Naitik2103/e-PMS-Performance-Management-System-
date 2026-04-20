@@ -79,31 +79,7 @@ const forgotPasswordMailgenContent = (username, passwordResetURL) => {
 }
 
 
-//This is the email template content generator for new user creation. It sends the auto-generated credentials to the newly created user.
-const userCreationMailgenContent = (username, email, password, loginURL) => {
-    return {
-        body: {
-            name: username,
-            intro: "Welcome to e-PMS! An account has been created for you by the administrator. Below are your temporary login credentials.",
-            dictionary: {
-                Email: email,
-                Password: password
-            },
-            action: {
-                instructions: "To log in and access your dashboard, please click the button below:",
-                button: {
-                    text: "Login to your account",
-                    link: loginURL,
-                    colour: "#1c6de7", // Optional action button color
-                }
-            },
-            outro: "We recommend changing your password after your first login. If you have any questions, feel free to reply to this email."
-        }
-    }
-}
-
 export {
     forgotPasswordMailgenContent,
-    userCreationMailgenContent,
     sendEmail
 }
