@@ -719,8 +719,8 @@ const resetForgotPassword = async (req, res, next) => {
 
     // Find the valid token
     const { rows } = await pool.query(
-      "SELECT id, user_id FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > NOW() AND used_at IS NULL",
-      [tokenHash]
+      "SELECT id, user_id FROM password_reset_tokens WHERE token_hash = $1 AND expires_at > $2 AND used_at IS NULL",
+      [tokenHash, new Date()]
     );
 
     if (rows.length === 0) {
