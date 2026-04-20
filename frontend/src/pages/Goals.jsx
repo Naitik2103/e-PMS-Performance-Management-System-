@@ -215,8 +215,8 @@ const Goals = () => {
     }
   };
 
-  const showGroupedByEmployee = activeRole === ROLES.REPORTING_OFFICER;
-  const canTakeGoalAction = activeRole === ROLES.REPORTING_OFFICER;
+  const showGroupedByEmployee = activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER;
+  const canTakeGoalAction = activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER;
 
   return (
     <div className="page-content">
@@ -329,10 +329,20 @@ const Goals = () => {
                       <td>{Number(goal.weightage).toFixed(2)}</td>
                       <td><StatusBadge status={goal.status} /></td>
                       <td>
-                          {canTakeGoalAction && goal.status === "submitted" && (
+                          {canTakeGoalAction && (
                             <div className="table-actions">
-                              <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
-                              <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
+                              {activeRole === ROLES.REPORTING_OFFICER && goal.status === "submitted" && (
+                                <>
+                                  <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
+                                  <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "ro", "return")}>Return</button>
+                                </>
+                              )}
+                              {activeRole === ROLES.REVIEWING_OFFICER && goal.status === "ro_approved" && (
+                                <>
+                                  <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
+                                  <button className="btn ghost" type="button" onClick={() => handleApprove(goal.id, "review", "return")}>Return</button>
+                                </>
+                              )}
                             </div>
                           )}
                       </td>

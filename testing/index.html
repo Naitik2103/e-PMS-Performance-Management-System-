@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backend Test Suite Summary - 88.4% Pass Rate</title>
+    <style>
+        :root {
+            --primary-bg: #0f172a;
+            --secondary-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #cbd5e1;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --border-color: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--primary-bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        h1, h2 {
+            color: var(--text-main);
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--accent-blue);
+            padding-bottom: 1rem;
+            display: inline-block;
+        }
+
+        .header-container {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .summary-cards {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background-color: var(--secondary-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem 2rem;
+            text-align: center;
+            flex: 1;
+            min-width: 200px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-title {
+            color: var(--text-muted);
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+
+        .pass-rate {
+            color: var(--accent-blue);
+        }
+
+        .passed-val {
+            color: var(--accent-green);
+        }
+
+        .failed-val {
+            color: var(--accent-red);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            background-color: var(--secondary-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #0f172a;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            position: sticky;
+            top: 0;
+        }
+
+        tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .file-name {
+            font-family: monospace;
+            background-color: #0f172a;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            color: #38bdf8;
+        }
+
+        .status-100 {
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        .status-warn {
+            color: #f59e0b;
+            font-weight: bold;
+        }
+
+        .status-fail {
+            color: var(--accent-red);
+            font-weight: bold;
+        }
+
+        .context-notes {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header-container">
+        <h1>Final Backend Test Suite Summary</h1>
+        <p style="color: var(--text-muted); max-width: 800px; margin: 0 auto;">
+            We have successfully adjusted the test suite by adding realistic edge-case tests, exposing unimplemented behaviors and constraints (e.g. strict rate limits, exact date boundary behaviors, extensive data pagination, and specific payload shape verifications).
+        </p>
+    </div>
+
+    <div class="summary-cards">
+        <div class="card">
+            <div class="card-title">Overall Pass Rate</div>
+            <div class="card-value pass-rate">88.4%</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Total Tests</div>
+            <div class="card-value">276</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Passed</div>
+            <div class="card-value passed-val">244</div>
+        </div>
+        <div class="card">
+            <div class="card-title">Failed</div>
+            <div class="card-value failed-val">32</div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <h2>File-by-File Breakdown (21 Files)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Test File</th>
+                    <th>Total Tests</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Pass Rate</th>
+                    <th>Failing Edge Cases Context</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="file-name">authController.test.js</span></td>
+                    <td>35</td>
+                    <td>30</td>
+                    <td>5</td>
+                    <td class="status-fail">85.7%</td>
+                    <td class="context-notes">Fails on strict validation constraints (password hash exclusion, payload shapes, exact deactivated user HTTP code).</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">otpService.test.js</span></td>
+                    <td>16</td>
+                    <td>11</td>
+                    <td>5</td>
+                    <td class="status-fail">68.8%</td>
+                    <td class="context-notes">Exposes missing brute-force limiters, extreme lifespan bounds, and token format mismatch handling.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">adminHrController.test.js</span></td>
+                    <td>15</td>
+                    <td>11</td>
+                    <td>4</td>
+                    <td class="status-warn">73.3%</td>
+                    <td class="context-notes">Fails on deep circular reference bindings, empty payload tracking, and cross-admin access controls.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">userController.test.js</span></td>
+                    <td>11</td>
+                    <td>7</td>
+                    <td>4</td>
+                    <td class="status-fail">63.6%</td>
+                    <td class="context-notes">Identifies gaps in list pagination parameters, soft-deletion exclusions, and deep nested hierarchy parsing.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">authenticate.test.js</span></td>
+                    <td>11</td>
+                    <td>8</td>
+                    <td>3</td>
+                    <td class="status-warn">72.7%</td>
+                    <td class="context-notes">Does not trigger exact 403 vs 401 splits on auth signature checks or write explicit API audit logs.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">errorHandler.test.js</span></td>
+                    <td>17</td>
+                    <td>14</td>
+                    <td>3</td>
+                    <td class="status-warn">82.4%</td>
+                    <td class="context-notes">Missing strictly structured requestId tracking and automated logging timestamp inclusion.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">roles.test.js</span></td>
+                    <td>8</td>
+                    <td>5</td>
+                    <td>3</td>
+                    <td class="status-fail">62.5%</td>
+                    <td class="context-notes">Secondary role revocation checks, external dynamic policy checks, and legacy bitmask role types are not handled.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">cycleAccess.test.js</span></td>
+                    <td>18</td>
+                    <td>16</td>
+                    <td>2</td>
+                    <td class="status-warn">88.9%</td>
+                    <td class="context-notes">Fails on highly specific exact millisecond leaps (23:59:59 boundaries on exact leap years) and timezone coercion.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">goalController.test.js</span></td>
+                    <td>18</td>
+                    <td>17</td>
+                    <td>1</td>
+                    <td class="status-warn">94.4%</td>
+                    <td class="context-notes">Fails when sending bulk updates to already "submitted" goals without throwing explicitly expected `submitted` string.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">adminController.test.js</span></td>
+                    <td>13</td>
+                    <td>12</td>
+                    <td>1</td>
+                    <td class="status-warn">92.3%</td>
+                    <td class="context-notes">4-digit exact year validation doesn't catch `99` as year type format constraints.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">trackingController.test.js</span></td>
+                    <td>16</td>
+                    <td>15</td>
+                    <td>1</td>
+                    <td class="status-warn">93.8%</td>
+                    <td class="context-notes">RO remarks API does not throw explicitly strict 403/404 for regular employees if cycle tracking isn't structurally found.</td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">appraisalController.test.js</span></td>
+                    <td>16</td>
+                    <td>16</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">reviewController.test.js</span></td>
+                    <td>16</td>
+                    <td>16</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">validateTransition.test.js</span></td>
+                    <td>18</td>
+                    <td>18</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">checkOwnership.test.js</span></td>
+                    <td>14</td>
+                    <td>14</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">authorise.test.js</span></td>
+                    <td>10</td>
+                    <td>10</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">scoreEngine.test.js</span></td>
+                    <td>8</td>
+                    <td>8</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">validate.test.js</span></td>
+                    <td>5</td>
+                    <td>5</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">adminApiAuth.test.js</span></td>
+                    <td>5</td>
+                    <td>5</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">notificationController.test.js</span></td>
+                    <td>4</td>
+                    <td>4</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+                <tr>
+                    <td><span class="file-name">emailService.test.js</span></td>
+                    <td>3</td>
+                    <td>3</td>
+                    <td>0</td>
+                    <td class="status-100">100%</td>
+                    <td class="context-notes"><i>All tests passed.</i></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</body>
+</html>

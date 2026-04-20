@@ -476,11 +476,11 @@ const listGoalsForReviewing = async (req, res, next) => {
   try {
     const selectedEmployeeId = req.query?.employeeId ? String(req.query.employeeId) : null;
     const params = [req.user.id];
-    let whereClause = "WHERE p.reviewing_officer_id = $1 AND g.status = 'approved'";
+    let whereClause = "WHERE p.reviewing_officer_id = $1 AND g.status IN ('ro_approved', 'approved')";
 
     if (selectedEmployeeId) {
       params.push(selectedEmployeeId);
-      whereClause = "WHERE g.user_id = $2 AND p.reviewing_officer_id = $1 AND g.status = 'approved'";
+      whereClause = "WHERE g.user_id = $2 AND p.reviewing_officer_id = $1 AND g.status IN ('ro_approved', 'approved')";
     }
 
     const { rows } = await pool.query(
@@ -607,7 +607,7 @@ const approveGoalByRO = async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const nextStatus = decision === "return" ? "returned" : "approved";
+      const nextStatus = decision === "return" ? "returned" : "ro_approved";
       await client.query(
         "UPDATE goals SET status = $1, ro_approval_remarks = $2, updated_at = NOW() WHERE goal_id = $3",
         [nextStatus, remarks || null, id]
@@ -630,7 +630,7 @@ const approveGoalByRO = async (req, res, next) => {
       client.release();
     }
 
-    const nextStatus = decision === "return" ? "returned" : "approved";
+    const nextStatus = decision === "return" ? "returned" : "ro_approved";
     await notifyUser({
       userId: goal.user_id,
       senderId: req.user.id,
@@ -641,7 +641,7 @@ const approveGoalByRO = async (req, res, next) => {
       entityId: id
     });
 
-    await writeAudit({ user: req.user, action: nextStatus === "approved" ? "approve" : "return", entity: "goal", entityId: id });
+    await writeAudit({ user: req.user, action: nextStatus === "ro_approved" ? "approve" : "return", entity: "goal", entityId: id });
     const out = await pool.query("SELECT * FROM goals WHERE goal_id = $1", [id]);
     return res.json(out.rows[0]);
   } catch (error) {
@@ -659,7 +659,7 @@ const approveGoalByReviewing = async (req, res, next) => {
       res.status(404);
       return next(new Error("Goal not found"));
     }
-    if (goal.status !== "approved") {
+    if (goal.status !== "ro_approved") {
       res.status(400);
       return next(new Error("Goal is not ready for Reviewing Officer action"));
     }
