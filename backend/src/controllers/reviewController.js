@@ -428,6 +428,102 @@ const submitGoalStageRatings = async (req, res, next) => {
   }
 };
 
+export const saveDraftGoalRatings = async (req, res, next) => {
+  try {
+    const { appraisalId, goalRatings = [] } = req.body;
+    await ensureReviewSchema();
+
+    const appRes = await pool.query("SELECT * FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+    let appraisal = appRes.rows[0];
+    if (!appraisal) return res.status(404).json({ error: "Appraisal not found" });
+
+    const stage = getGoalReviewStage(appraisal.status);
+    if (!stage) return res.status(409).json({ error: "Action not allowed in current appraisal state" });
+
+    const roleCheck =
+      stage.role === ROLES.REPORTING_OFFICER
+        ? await ensureIsROForAppraisal(appraisal.id, req.user.userId)
+        : stage.role === ROLES.REVIEWING_OFFICER
+          ? await ensureIsRevOForAppraisal(appraisal.id, req.user.userId)
+          : await ensureIsAOForAppraisal(appraisal.id, req.user.userId);
+    if (!roleCheck.ok) return res.status(403).json({ error: roleCheck.error });
+
+    const normalizedRatings = [];
+    for (const item of goalRatings) {
+      const goalId = String(item.goalId || item.goal_id || item.id);
+      const rating = Number(item.rating || 0);
+      const remarks = String(item.remarks || "").trim();
+      if (goalId && rating >= 1 && rating <= 5) {
+        normalizedRatings.push({ goalId, rating, remarks });
+      }
+    }
+
+    for (const item of normalizedRatings) {
+      const id = crypto.randomUUID();
+      await pool.query(
+        `
+        INSERT INTO appraisal_ratings (id, appraisal_id, goal_id, ${stage.ratingField}, ${stage.remarksField}, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (appraisal_id, goal_id)
+        DO UPDATE SET ${stage.ratingField} = EXCLUDED.${stage.ratingField}, ${stage.remarksField} = EXCLUDED.${stage.remarksField}, updated_at = NOW()
+        `,
+        [id, appraisalId, item.goalId, item.rating, item.remarks]
+      );
+    }
+
+    return res.json({ success: true, message: "Goal ratings draft saved successfully" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const saveDraftAttributeRatings = async (req, res, next) => {
+  try {
+    const { appraisalId, attributeRatings = [] } = req.body;
+    await ensureReviewSchema();
+
+    const appRes = await pool.query("SELECT * FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
+    let appraisal = appRes.rows[0];
+    if (!appraisal) return res.status(404).json({ error: "Appraisal not found" });
+
+    const stage = getGoalReviewStage(appraisal.status);
+    if (!stage) return res.status(409).json({ error: "Action not allowed in current appraisal state" });
+
+    const roleCheck =
+      stage.role === ROLES.REPORTING_OFFICER
+        ? await ensureIsROForAppraisal(appraisal.id, req.user.userId)
+        : stage.role === ROLES.REVIEWING_OFFICER
+          ? await ensureIsRevOForAppraisal(appraisal.id, req.user.userId)
+          : await ensureIsAOForAppraisal(appraisal.id, req.user.userId);
+    if (!roleCheck.ok) return res.status(403).json({ error: roleCheck.error });
+
+    const normalizedAttrRatings = [];
+    for (const item of attributeRatings) {
+      const attributeId = String(item.attributeId || item.id);
+      const rating = Number(item.rating || 0);
+      if (attributeId && rating >= 1 && rating <= 5) {
+        normalizedAttrRatings.push({ 
+          attributeId, 
+          rating, 
+          category: item.category, 
+          attributeKey: item.attributeKey 
+        });
+      }
+    }
+
+    await upsertAttributeRatings({
+      appraisalId,
+      userId: req.user.userId,
+      role: stage.role,
+      ratings: normalizedAttrRatings
+    });
+
+    return res.json({ success: true, message: "Attribute ratings draft saved successfully" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const resolveSelfAppraisalTable = async () => {
   const { rows } = await pool.query(
     `

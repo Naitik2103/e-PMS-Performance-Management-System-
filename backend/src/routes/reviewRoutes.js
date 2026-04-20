@@ -13,7 +13,9 @@ import {
   getAppraisalGoalsWithRatings,
   updateGoalRating,
   submitAnnualGoalRatings,
-  submitGoalStageRatings
+  submitGoalStageRatings,
+  saveDraftGoalRatings,
+  saveDraftAttributeRatings
 } from "../controllers/reviewController.js";
 import { selfSummaryValidation, roRatingValidation, remarkValidation, goalStageSubmissionValidation } from "../validation/reviewValidation.js";
 import { validate } from "../middleware/validate.js";
@@ -33,6 +35,8 @@ router.post("/self-summary", protect, authorizeRoles(ROLES.EMPLOYEE), selfSummar
 router.post("/goal-rating", protect, authorizeRoles(ROLES.EMPLOYEE), updateGoalRating);
 router.post("/annual-goals/submit", protect, authorizeRoles(ROLES.EMPLOYEE), submitAnnualGoalRatings);
 router.post("/goal-stage-submit", protect, authorizeRoles(ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER), goalStageSubmissionValidation, validate, submitGoalStageRatings);
+router.post("/draft-goal-ratings", protect, authorizeRoles(ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER), saveDraftGoalRatings);
+router.post("/draft-attribute-ratings", protect, authorizeRoles(ROLES.REPORTING_OFFICER, ROLES.REVIEWING_OFFICER, ROLES.ACCEPTING_OFFICER), saveDraftAttributeRatings);
 router.post("/ro-rate", protect, authorizeRoles(ROLES.REPORTING_OFFICER), roRatingValidation, validate, rateByRO);
 router.post("/review-approve", protect, authorizeRoles(ROLES.REVIEWING_OFFICER), remarkValidation, validate, reviewByReviewing);
 router.post("/accept", protect, authorizeRoles(ROLES.ACCEPTING_OFFICER), remarkValidation, validate, acceptByAccepting);

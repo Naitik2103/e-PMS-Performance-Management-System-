@@ -262,6 +262,55 @@ const Reviews = () => {
     });
   };
 
+  const handleSaveDraftGoalRatings = async () => {
+    if (!selectedReview) return;
+    setError("");
+    try {
+      const goalRatings = selectedReviewGoals.map((goal) => {
+        const current = selectedReviewInputs[goal.id] || {};
+        return {
+          goalId: goal.id,
+          rating: Number(current.rating || 0),
+          remarks: String(current.remarks || "").trim()
+        };
+      });
+
+      await apiClient.post("/reviews/draft-goal-ratings", {
+        appraisalId: selectedReview.id,
+        goalRatings
+      });
+
+      alert("Goal ratings draft saved successfully!");
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to save goal ratings draft");
+    }
+  };
+
+  const handleSaveDraftAttributeRatings = async () => {
+    if (!selectedReview) return;
+    setError("");
+    try {
+      const attributeRatingsPayload = attributeMasters.map((attr) => {
+        const current = selectedReviewAttributeInputs[attr.id] || {};
+        return {
+          attributeId: attr.id,
+          rating: Number(current.rating || 0),
+          category: attr.category,
+          attributeKey: attr.attributeName
+        };
+      });
+
+      await apiClient.post("/reviews/draft-attribute-ratings", {
+        appraisalId: selectedReview.id,
+        attributeRatings: attributeRatingsPayload
+      });
+
+      alert("Attribute ratings draft saved successfully!");
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.message || "Unable to save attribute ratings draft");
+    }
+  };
+
   const submitSelectedReview = async () => {
     if (!selectedReview) return;
     setError("");
@@ -879,6 +928,14 @@ const Reviews = () => {
                   </table>
                 </div>
 
+                {selectedReviewStage && selectedReview?.canEdit && (
+                  <div className="action-row" style={{ marginTop: "12px", justifyContent: "flex-end" }}>
+                    <button className="btn outline" type="button" onClick={handleSaveDraftGoalRatings}>
+                      Save Goal Ratings
+                    </button>
+                  </div>
+                )}
+
                 {/* Quantitative Attributes UI */}
                 {attributeMasters.length > 0 && (
                   activeRole !== ROLES.EMPLOYEE ? 
@@ -986,10 +1043,18 @@ const Reviews = () => {
                   </div>
                 )}
 
+                {attributeMasters.length > 0 && selectedReviewStage && selectedReview?.canEdit && (
+                  <div className="action-row" style={{ marginTop: "12px", justifyContent: "flex-end" }}>
+                    <button className="btn outline" type="button" onClick={handleSaveDraftAttributeRatings}>
+                      Save Attribute Ratings
+                    </button>
+                  </div>
+                )}
+
                 {selectedReviewStage && selectedReview?.canEdit && (
                   <div className="action-row" style={{ marginTop: "16px" }}>
                     <button className="btn" type="button" disabled={!selectedReviewComplete} onClick={submitSelectedReview}>
-                      Submit to Next Officer
+                      {selectedReviewStage?.ratingKey === "aoRating" ? "Submit" : "Submit to Next Officer"}
                     </button>
                   </div>
                 )}
