@@ -198,10 +198,18 @@ const Reviews = () => {
       setSelectedReviewGoals(goals);
       const initialInputs = goals.reduce((acc, goal) => {
         const stage = response.data?.stage;
-        const ratingKey = stage === ROLES.REPORTING_OFFICER ? "roRating" : stage === ROLES.REVIEWING_OFFICER ? "revoRating" : "aoRating";
+        let defaultRating = "";
+        if (stage === ROLES.REPORTING_OFFICER) {
+          defaultRating = goal.roRating ?? "";
+        } else if (stage === ROLES.REVIEWING_OFFICER) {
+          defaultRating = goal.revoRating ?? goal.roRating ?? "";
+        } else if (stage === ROLES.ACCEPTING_OFFICER) {
+          defaultRating = goal.aoRating ?? goal.revoRating ?? "";
+        }
+        
         const remarksKey = stage === ROLES.REPORTING_OFFICER ? "roRemarks" : stage === ROLES.REVIEWING_OFFICER ? "revoRemarks" : "aoRemarks";
         acc[goal.id] = {
-          rating: goal[ratingKey] ?? "",
+          rating: defaultRating,
           remarks: goal[remarksKey] ?? ""
         };
         return acc;
@@ -214,8 +222,18 @@ const Reviews = () => {
 
       attributeMasters.forEach(attr => {
         const existing = attrRatings.find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === String(currentRoleKey));
+        let defaultRating = existing ? existing.rating : "";
+        if (!defaultRating) {
+          if (currentRoleKey === ROLES.REVIEWING_OFFICER) {
+            const prev = attrRatings.find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === ROLES.REPORTING_OFFICER);
+            if (prev) defaultRating = prev.rating;
+          } else if (currentRoleKey === ROLES.ACCEPTING_OFFICER) {
+            const prev = attrRatings.find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === ROLES.REVIEWING_OFFICER);
+            if (prev) defaultRating = prev.rating;
+          }
+        }
         attrInputs[attr.id] = {
-          rating: existing ? existing.rating : "",
+          rating: defaultRating,
           category: attr.category,
           attributeKey: attr.attributeName
         };
@@ -227,6 +245,21 @@ const Reviews = () => {
     } finally {
       setSelectedReviewLoading(false);
     }
+  };
+
+  const handleAutofillRemarks = () => {
+    if (!selectedReviewStage || selectedReviewStage.ratingKey === "roRating") return;
+    
+    setSelectedReviewInputs((prev) => {
+      const next = { ...prev };
+      selectedReviewGoals.forEach((goal) => {
+        const sourceRemarks = selectedReviewStage.ratingKey === "revoRating" ? goal.roRemarks : goal.revoRemarks;
+        if (sourceRemarks) {
+          next[goal.id] = { ...next[goal.id], remarks: sourceRemarks };
+        }
+      });
+      return next;
+    });
   };
 
   const submitSelectedReview = async () => {
@@ -682,11 +715,18 @@ const Reviews = () => {
         )}
         {selectedReview && (
           <div className="card" style={{ marginTop: "20px" }}>
-            <div className="card-header">
-              <h2>{selectedReviewStage?.label || "Goal Review"}</h2>
-              <span className="muted">
-                {selectedReview.employee?.name || "Employee"} · {selectedReview.cycle?.name || selectedReview.cycle?.year || "-"}
-              </span>
+            <div className="card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <h2>{selectedReviewStage?.label || "Goal Review"}</h2>
+                <span className="muted">
+                  {selectedReview.employee?.name || "Employee"} · {selectedReview.cycle?.name || selectedReview.cycle?.year || "-"}
+                </span>
+              </div>
+              {selectedReview?.canEdit && selectedReviewStage?.ratingKey !== "roRating" && (
+                <button className="btn ghost" type="button" onClick={handleAutofillRemarks}>
+                  Auto-fill Remarks
+                </button>
+              )}
             </div>
             {selectedReviewLoading ? (
               <div className="muted">Loading goal details...</div>
