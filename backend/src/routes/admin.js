@@ -9,7 +9,8 @@ import {
   createCycleWithParticipants,
   getCycleParticipants,
   bulkSaveParticipants,
-  activateCycle
+  activateCycle,
+  updateCycle
 } from "../controllers/adminHrController.js";
 import pool from "../config/db.js";
 
@@ -35,6 +36,7 @@ router.post("/cycles", createCycleWithParticipants);
 router.get("/cycles/:cycleId/participants", getCycleParticipants);
 router.put("/cycles/:cycleId/participants", bulkSaveParticipants);
 router.put("/cycles/:cycleId/activate", activateCycle);
+router.put("/cycles/:id", updateCycle);
 
 router.put("/cycles/:id/close", async (req, res, next) => {
   try {

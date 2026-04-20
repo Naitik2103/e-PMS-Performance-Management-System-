@@ -15,6 +15,7 @@ const AdminCyclesPage = () => {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingCycleId, setEditingCycleId] = useState(null);
   const [form, setForm] = useState({
     cycleName: "",
     financialYear: "",
@@ -70,19 +71,57 @@ const AdminCyclesPage = () => {
     }
   });
 
+  const updateMutation = useMutation({
+    mutationFn: (body) => apiClient.put(`/admin/cycles/${editingCycleId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "cycles"] });
+      showToast("Cycle updated");
+      setModalOpen(false);
+      setEditingCycleId(null);
+      setForm({
+        cycleName: "",
+        financialYear: "",
+        goalSettingStart: "",
+        goalSettingEnd: "",
+        sixMonthReviewStart: "",
+        sixMonthReviewEnd: "",
+        annualAppraisalStart: "",
+        annualAppraisalEnd: ""
+      });
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.error || "Could not update cycle", "error");
+    }
+  });
+
   const openModal = () => {
     const y = new Date().getFullYear();
-    setForm((f) => ({
-      ...f,
-      cycleName: f.cycleName || `Annual Appraisal ${y}-${String(y + 1).slice(-2)}`,
-      financialYear: f.financialYear || `${y}-${String(y + 1).slice(-2)}`,
-      goalSettingStart: f.goalSettingStart || `${y}-04-01`,
-      goalSettingEnd: f.goalSettingEnd || `${y}-04-30`,
-      sixMonthReviewStart: f.sixMonthReviewStart || `${y}-10-01`,
-      sixMonthReviewEnd: f.sixMonthReviewEnd || `${y}-10-31`,
-      annualAppraisalStart: f.annualAppraisalStart || `${y + 1}-02-01`,
-      annualAppraisalEnd: f.annualAppraisalEnd || `${y + 1}-03-31`
-    }));
+    setForm({
+      cycleName: `Annual Appraisal ${y}-${String(y + 1).slice(-2)}`,
+      financialYear: `${y}-${String(y + 1).slice(-2)}`,
+      goalSettingStart: `${y}-04-01`,
+      goalSettingEnd: `${y}-04-30`,
+      sixMonthReviewStart: `${y}-10-01`,
+      sixMonthReviewEnd: `${y}-10-31`,
+      annualAppraisalStart: `${y + 1}-02-01`,
+      annualAppraisalEnd: `${y + 1}-03-31`
+    });
+    setEditingCycleId(null);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (cycle) => {
+    setEditingCycleId(cycle.id);
+    setForm({
+      cycleName: cycle.cycleName || cycle.name,
+      financialYear: cycle.financialYear || cycle.year,
+      goalSettingStart: cycle.goalSettingStart,
+      goalSettingEnd: cycle.goalSettingEnd,
+      sixMonthReviewStart: cycle.sixMonthReviewStart || cycle.sixMonthProgressReviewStart,
+      sixMonthReviewEnd: cycle.sixMonthReviewEnd || cycle.sixMonthProgressReviewEnd,
+      annualAppraisalStart: cycle.annualAppraisalStart,
+      annualAppraisalEnd: cycle.annualAppraisalEnd
+    });
     setModalOpen(true);
   };
 
@@ -91,7 +130,7 @@ const AdminCyclesPage = () => {
       showToast("Cycle name and financial year are required", "error");
       return;
     }
-    createMutation.mutate({
+    const payload = {
       cycleName: form.cycleName.trim(),
       financialYear: form.financialYear.trim(),
       goalSettingStart: form.goalSettingStart || null,
@@ -100,7 +139,13 @@ const AdminCyclesPage = () => {
       sixMonthReviewEnd: form.sixMonthReviewEnd || null,
       annualAppraisalStart: form.annualAppraisalStart || null,
       annualAppraisalEnd: form.annualAppraisalEnd || null
-    });
+    };
+
+    if (editingCycleId) {
+      updateMutation.mutate(payload);
+    } else {
+      createMutation.mutate(payload);
+    }
   };
 
   return (
@@ -160,6 +205,9 @@ const AdminCyclesPage = () => {
                 <Link className="btn ghost" to={`/admin/cycles/${c.id}/participants`}>
                   Manage participants →
                 </Link>
+                <button type="button" className="btn ghost" onClick={() => openEditModal(c)}>
+                  Edit dates
+                </button>
                 {c.status === "draft" && (
                   <span
                     className="admin-activate-wrap"
@@ -184,7 +232,7 @@ const AdminCyclesPage = () => {
       {modalOpen && (
         <div className="modal-backdrop" role="presentation" onClick={() => setModalOpen(false)}>
           <div className="modal-panel" role="dialog" onClick={(e) => e.stopPropagation()}>
-            <h3>New appraisal cycle</h3>
+            <h3>{editingCycleId ? "Edit appraisal cycle" : "New appraisal cycle"}</h3>
             <div className="form-grid">
               <div className="form-row">
                 <div>
@@ -259,8 +307,8 @@ const AdminCyclesPage = () => {
               <button type="button" className="btn ghost" onClick={() => setModalOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className="btn" onClick={submit} disabled={createMutation.isPending}>
-                Create
+              <button type="button" className="btn" onClick={submit} disabled={createMutation.isPending || updateMutation.isPending}>
+                {editingCycleId ? "Update" : "Create"}
               </button>
             </div>
           </div>

@@ -714,6 +714,67 @@ const activateCycle = async (req, res, next) => {
   }
 };
 
+const updateCycle = async (req, res, next) => {
+  try {
+    const id = req.params.id || req.params.cycleId;
+    const current = await pool.query(
+      "SELECT cycle_id, cycle_year, closed_at FROM appraisal_cycles WHERE cycle_id = $1 LIMIT 1",
+      [id]
+    );
+    if (!current.rows.length) {
+      return res.status(404).json({ error: "Cycle not found" });
+    }
+
+    const year = req.body.financialYear || req.body.year ? String(req.body.financialYear || req.body.year).trim() : null;
+    if (year && year !== String(current.rows[0].cycle_year)) {
+      const dupe = await pool.query("SELECT 1 FROM appraisal_cycles WHERE cycle_year = $1 LIMIT 1", [year]);
+      if (dupe.rows.length) {
+        return res.status(409).json({ error: "An appraisal cycle already exists for this year" });
+      }
+    }
+
+    await pool.query(
+      `
+      UPDATE appraisal_cycles SET
+        cycle_name = COALESCE($2, cycle_name),
+        cycle_year = COALESCE($3, cycle_year),
+        financial_year = COALESCE($3, financial_year),
+        goal_setting_start = $4,
+        goal_setting_end = $5,
+        six_month_progress_review_start = $6,
+        six_month_progress_review_end = $7,
+        annual_appraisal_start = $8,
+        annual_appraisal_end = $9,
+        updated_at = NOW()
+      WHERE cycle_id = $1
+      `,
+      [
+        id,
+        req.body.cycleName || req.body.name || null,
+        year,
+        req.body.goalSettingStart || null,
+        req.body.goalSettingEnd || null,
+        req.body.sixMonthReviewStart || req.body.sixMonthProgressReviewStart || null,
+        req.body.sixMonthReviewEnd || req.body.sixMonthProgressReviewEnd || null,
+        req.body.annualAppraisalStart || null,
+        req.body.annualAppraisalEnd || null
+      ]
+    );
+
+    await writeAudit({
+      user: req.user,
+      action: "update",
+      entity: "appraisal_cycle",
+      entityId: id,
+      details: { ...req.body }
+    });
+
+    return res.json({ message: "Cycle updated successfully" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 export {
   getAllUsersForDropdowns,
   getDepartmentsAndDesignations,
@@ -722,5 +783,6 @@ export {
   createCycleWithParticipants,
   getCycleParticipants,
   bulkSaveParticipants,
-  activateCycle
+  activateCycle,
+  updateCycle
 };
