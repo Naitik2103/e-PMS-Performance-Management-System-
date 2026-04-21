@@ -702,6 +702,10 @@ const resetForgotPassword = async (req, res, next) => {
     if (newPassword.length < 8) {
       return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
+    const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])(?!.*\s).{8,15}$/;
+    if (!strongPasswordPattern.test(newPassword)) {
+      return res.status(400).json({ error: "Password must be 8-15 characters, no spaces, and include uppercase, lowercase, number and symbol" });
+    }
 
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 

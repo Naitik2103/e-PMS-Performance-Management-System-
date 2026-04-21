@@ -16,7 +16,7 @@ const allowedRoles = [
 
 const namePattern = /^[\p{L}]+$/u;
 const phonePattern = /^\d{10}$/;
-const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])(?!.*\s).{8,15}$/;
 
 const createUserValidation = [
   body("firstName")

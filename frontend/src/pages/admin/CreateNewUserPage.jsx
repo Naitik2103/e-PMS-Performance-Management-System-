@@ -18,7 +18,7 @@ const ORG_LEVEL_OPTIONS = [
 const namePattern = /^\p{L}+$/u;
 const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const phonePattern = /^\d{10}$/;
-const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
+const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])(?!.*\s).{8,15}$/;
 const isValidName = (value) => namePattern.test(String(value || "").trim());
 const isValidEmail = (value) => emailPattern.test(String(value || "").trim());
 const isValidPhone = (value) => {

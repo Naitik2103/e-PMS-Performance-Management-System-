@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, CheckCircle2, Circle } from "lucide-react";
 import { apiClient } from "../api/client";
 
 const ResetPassword = () => {
@@ -15,6 +15,17 @@ const ResetPassword = () => {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const requirements = useMemo(() => [
+    { label: "Between 8 and 15 characters", met: newPassword.length >= 8 && newPassword.length <= 15 },
+    { label: "No spaces allowed", met: newPassword.length > 0 && !/\s/.test(newPassword) },
+    { label: "At least one uppercase letter", met: /[A-Z]/.test(newPassword) },
+    { label: "At least one lowercase letter", met: /[a-z]/.test(newPassword) },
+    { label: "At least one number", met: /\d/.test(newPassword) },
+    { label: "At least one special character", met: /[^A-Za-z0-9\s]/.test(newPassword) },
+  ], [newPassword]);
+
+  const allMet = useMemo(() => requirements.every(r => r.met), [requirements]);
+
   useEffect(() => {
     if (!token) {
       setError("Invalid or missing reset token.");
@@ -28,6 +39,10 @@ const ResetPassword = () => {
 
     if (!token) {
       setError("Missing reset token.");
+      return;
+    }
+    if (!allMet) {
+      setError("Password does not meet all security requirements.");
       return;
     }
     if (!newPassword || !confirmPassword) {
@@ -82,9 +97,10 @@ const ResetPassword = () => {
                   <input
                     id="new-password"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={(e) => setNewPassword(e.target.value.replace(/\s/g, ""))}
                     type={showNewPassword ? "text" : "password"}
                     placeholder="Create new password"
+                    maxLength={15}
                     required
                     disabled={!token || success}
                   />
@@ -98,9 +114,28 @@ const ResetPassword = () => {
                     {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+
+                <div className="password-requirements" style={{ marginTop: "12px", display: "grid", gap: "8px" }}>
+                  {requirements.map((req, idx) => (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "8px", 
+                        fontSize: "12px",
+                        color: req.met ? "#16a34a" : "#64748b",
+                        transition: "color 0.2s ease"
+                      }}
+                    >
+                      {req.met ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+                      <span>{req.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div>
+              <div style={{ marginTop: "8px" }}>
                 <label htmlFor="confirm-password">Confirm New Password</label>
                 <input
                   id="confirm-password"
@@ -117,7 +152,12 @@ const ResetPassword = () => {
               {success && <div className="success-text">{success}</div>}
               
               {!success && (
-                <button className="btn login-submit-btn" type="submit" disabled={loading || !token}>
+                <button 
+                  className="btn login-submit-btn" 
+                  type="submit" 
+                  disabled={loading || !token || !allMet}
+                  style={{ opacity: (!allMet || loading) ? 0.6 : 1 }}
+                >
                   {loading ? "Resetting..." : "Reset Password"}
                 </button>
               )}
