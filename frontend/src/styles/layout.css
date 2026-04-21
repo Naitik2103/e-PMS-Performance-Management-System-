@@ -27,7 +27,6 @@
   color: var(--white);
   display: flex;
   flex-direction: column;
-  padding: 0;
   position: fixed;
   left: 0;
   top: 0;
@@ -35,7 +34,7 @@
   transform: translateX(-100%);
   transition: transform 0.22s ease;
   z-index: 1200;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .sidebar.open {
@@ -76,6 +75,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  overflow-y: auto;
 }
 
 .sidebar-link {
@@ -123,6 +123,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-top: auto;
 }
 
 .sidebar-avatar {
@@ -540,21 +541,21 @@
   }
 
   .sidebar {
-    position: relative;
-    top: auto;
-    left: auto;
-    height: auto;
-    min-height: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
     transform: none;
     width: 256px;
     min-width: 256px;
     z-index: 10;
-    overflow-y: visible;
   }
 
   .app-content {
     flex: 1;
+    margin-left: 256px;
     padding: 1.75rem 2rem;
+    min-height: 100vh;
   }
 
   .topbar {
