@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../../api/client";
 
 const AllUsersPage = () => {
@@ -20,6 +20,15 @@ const AllUsersPage = () => {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  const groupedUsers = useMemo(() => {
+    return users.reduce((acc, user) => {
+      const dept = user.department || "Other / Unassigned";
+      if (!acc[dept]) acc[dept] = [];
+      acc[dept].push(user);
+      return acc;
+    }, {});
+  }, [users]);
 
   const handleEdit = (user) => {
     setEditingUser(user);
@@ -59,32 +68,55 @@ const AllUsersPage = () => {
     <div className="page-content">
       <div className="card">
         <div className="card-header">
-          <h2>All Users</h2>
+          <h2>All Users by Department</h2>
         </div>
-        {success && <div className="success-text">{success}</div>}
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Department</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.name}</td>
-                  <td>{user.email}</td>
-                  <td>{user.department || <span className="muted">-</span>}</td>
-                  <td>
-                    <button className="btn outline" type="button" onClick={() => handleEdit(user)}>Edit Profile</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {success && <div className="success-text" style={{ padding: "0 20px" }}>{success}</div>}
+        
+        <div style={{ padding: "20px" }}>
+          {Object.keys(groupedUsers).sort().map(dept => (
+            <div key={dept} className="dept-section" style={{ marginBottom: "40px" }}>
+              <div style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "12px", 
+                marginBottom: "16px",
+                paddingBottom: "8px",
+                borderBottom: "2px solid #f0f0f0"
+              }}>
+                <h3 style={{ margin: 0, color: "var(--primary-color)", fontSize: "1.2rem" }}>{dept}</h3>
+                <span className="muted small" style={{ backgroundColor: "#f5f5f5", padding: "2px 8px", borderRadius: "12px" }}>
+                  {groupedUsers[dept].length} {groupedUsers[dept].length === 1 ? "User" : "Users"}
+                </span>
+              </div>
+              
+              <div className="table-wrap" style={{ border: "1px solid #f0f0f0", borderRadius: "8px", overflow: "hidden" }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedUsers[dept].map((user) => (
+                      <tr key={user.id}>
+                        <td style={{ fontWeight: 500 }}>{user.name}</td>
+                        <td>{user.email}</td>
+                        <td>
+                          <button className="btn outline sm" type="button" onClick={() => handleEdit(user)}>Edit Profile</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+          
+          {users.length === 0 && (
+            <div className="muted" style={{ textAlign: "center", padding: "40px" }}>No users found.</div>
+          )}
         </div>
       </div>
 
