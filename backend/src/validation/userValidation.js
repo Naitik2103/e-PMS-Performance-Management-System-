@@ -15,7 +15,7 @@ const allowedRoles = [
 ];
 
 const namePattern = /^[\p{L}]+$/u;
-const phonePattern = /^[+]?([0-9\s()-]{7,20})$/;
+const phonePattern = /^\d{10}$/;
 const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 
 const createUserValidation = [
@@ -30,12 +30,12 @@ const createUserValidation = [
   body("email").isEmail().withMessage("Valid email is required"),
   body("phone")
     .optional({ checkFalsy: true })
-    .matches(phonePattern).withMessage("Phone number must be valid")
+    .matches(phonePattern).withMessage("Phone number must be exactly 10 digits")
     .custom((value) => {
       if (!value) return true;
       const digits = String(value).replace(/\D/g, "");
-      if (digits.length < 10 || digits.length > 15) {
-        throw new Error("Phone number must contain 10 to 15 digits");
+      if (digits.length !== 10) {
+        throw new Error("Phone number must contain exactly 10 digits");
       }
       return true;
     }),

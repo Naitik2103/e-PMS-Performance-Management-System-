@@ -98,6 +98,7 @@ const listUsers = async (req, res, next) => {
         u.rew_id,
         u.ao_id,
         u.is_active,
+        u.phone,
         d.name AS department
       FROM users u
       LEFT JOIN departments d ON d.id = u.department_id
@@ -119,7 +120,8 @@ const listUsers = async (req, res, next) => {
         reportingTo: u.ro_id,
         reviewingOfficerId: u.rew_id,
         acceptingOfficerId: u.ao_id,
-        isActive: u.is_active
+        isActive: u.is_active,
+        phone: u.phone
       }))
     );
   } catch (error) {
@@ -142,7 +144,7 @@ const updateUser = async (req, res, next) => {
 
     const existing = await pool.query(
       `
-      SELECT user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active
+      SELECT user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active, phone
       FROM users
       WHERE user_id = $1
       LIMIT 1
@@ -164,6 +166,14 @@ const updateUser = async (req, res, next) => {
     const acceptingOfficerId =
       req.body.acceptingOfficerId !== undefined ? req.body.acceptingOfficerId || null : existing.rows[0].ao_id;
 
+    const firstName = req.body.firstName !== undefined ? req.body.firstName : existing.rows[0].first_name;
+    const lastName = req.body.lastName !== undefined ? req.body.lastName : existing.rows[0].last_name;
+    const phone = req.body.phone !== undefined ? req.body.phone : existing.rows[0].phone;
+    if (req.body.phone && String(req.body.phone).trim().length !== 10) {
+      res.status(400);
+      return next(new Error("Phone number must be exactly 10 digits"));
+    }
+
     const updated = await pool.query(
       `
       UPDATE users SET
@@ -172,11 +182,14 @@ const updateUser = async (req, res, next) => {
         ro_id = $4,
         rew_id = $5,
         ao_id = $6,
+        first_name = $7,
+        last_name = $8,
+        phone = $9,
         updated_at = NOW()
       WHERE user_id = $1
-      RETURNING user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active
+      RETURNING user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active, phone
       `,
-      [id, normalizedRole, departmentId, reportingTo, reviewingOfficerId, acceptingOfficerId]
+      [id, normalizedRole, departmentId, reportingTo, reviewingOfficerId, acceptingOfficerId, firstName, lastName, phone]
     );
 
     const row = updated.rows[0];

@@ -17,16 +17,14 @@ const ORG_LEVEL_OPTIONS = [
 
 const namePattern = /^\p{L}+$/u;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const phonePattern = /^[+]?([0-9\s()-]{7,20})$/;
+const phonePattern = /^\d{10}$/;
 const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
 const isValidName = (value) => namePattern.test(String(value || "").trim());
 const isValidEmail = (value) => emailPattern.test(String(value || "").trim());
 const isValidPhone = (value) => {
   const trimmed = String(value || "").trim();
   if (!trimmed) return true;
-  if (!phonePattern.test(trimmed)) return false;
-  const digits = trimmed.replace(/\D/g, "");
-  return digits.length >= 10 && digits.length <= 15;
+  return phonePattern.test(trimmed);
 };
 const isStrongPassword = (value) => strongPasswordPattern.test(String(value || ""));
 
@@ -124,14 +122,15 @@ const CreateNewUserPage = () => {
   };
 
   const handlePhoneChange = (value) => {
-    setForm((prev) => ({ ...prev, phone: value }));
+    const cleaned = value.replace(/\D/g, "").slice(0, 10);
+    setForm((prev) => ({ ...prev, phone: cleaned }));
     const trimmed = String(value || "").trim();
     setFieldErrors((prev) => {
       const next = { ...prev };
       if (!trimmed) {
         delete next.phone;
       } else if (!isValidPhone(trimmed)) {
-        next.phone = "Enter a valid phone number format";
+        next.phone = "Phone number must be exactly 10 digits";
       } else {
         delete next.phone;
       }
@@ -215,7 +214,7 @@ const CreateNewUserPage = () => {
     else if (!isValidName(form.lastName)) err.lastName = "Only letters are allowed";
     if (!form.email.trim()) err.email = "Required";
     else if (!isValidEmail(form.email)) err.email = "Enter a valid email address";
-    if (form.phone.trim() && !isValidPhone(form.phone)) err.phone = "Enter a valid phone number format";
+    if (form.phone.trim() && !isValidPhone(form.phone)) err.phone = "Phone number must be exactly 10 digits";
     if (!form.departmentId) err.departmentId = "Required";
     if (!form.role) err.role = "Required";
     if (!form.orgLevel) err.orgLevel = "Required";
@@ -339,6 +338,7 @@ const CreateNewUserPage = () => {
                 onChange={(e) => handlePhoneChange(e.target.value)}
                 inputMode="tel"
                 autoComplete="tel"
+                maxLength={10}
                 aria-invalid={Boolean(fieldErrors.phone)}
               />
               {fieldErrors.phone && <div className="error-text">{fieldErrors.phone}</div>}

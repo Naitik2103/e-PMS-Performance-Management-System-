@@ -119,6 +119,9 @@ const createHrUser = async (req, res, next) => {
     const normalizedRole = normalizeRole(role);
 
     const phoneVal = phone ? String(phone).trim() : null;
+    if (phoneVal && phoneVal.length !== 10) {
+      return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
+    }
     const reportingToId = reportingTo || null;
 
     const returning = `
