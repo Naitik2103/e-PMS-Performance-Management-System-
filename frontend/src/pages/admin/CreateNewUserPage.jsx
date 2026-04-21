@@ -9,10 +9,12 @@ const ROLE_OPTIONS = [
   { value: "hr_admin", label: "Admin" }
 ];
 const ORG_LEVEL_OPTIONS = [
-  { value: 1, label: "Level 1 - Faculty / Staff" },
-  { value: 2, label: "Level 2 - HOD / Lab Head" },
-  { value: 3, label: "Level 3 - Dean / School Head" },
-  { value: 4, label: "Level 4 - Director / Vice Chancellor" }
+  { value: 1, label: "Level 1" },
+  { value: 2, label: "Level 2" },
+  { value: 3, label: "Level 3" },
+  { value: 4, label: "Level 4" },
+  { value: 5, label: "Level 5" },
+  { value: 6, label: "Level 6" }
 ];
 
 const namePattern = /^\p{L}+$/u;

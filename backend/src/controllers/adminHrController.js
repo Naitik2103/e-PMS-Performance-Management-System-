@@ -103,8 +103,8 @@ const createHrUser = async (req, res, next) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
     const parsedOrgLevel = Number(orgLevel);
-    if (!Number.isInteger(parsedOrgLevel) || parsedOrgLevel < 1 || parsedOrgLevel > 4) {
-      return res.status(400).json({ error: "orgLevel must be an integer between 1 and 4" });
+    if (!Number.isInteger(parsedOrgLevel) || parsedOrgLevel < 1 || parsedOrgLevel > 6) {
+      return res.status(400).json({ error: "orgLevel must be an integer between 1 and 6" });
     }
     if (String(temporaryPassword).length < 8) {
       return res.status(400).json({ error: "Temporary password must be at least 8 characters" });
