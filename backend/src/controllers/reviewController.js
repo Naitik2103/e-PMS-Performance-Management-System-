@@ -1186,6 +1186,14 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
       cycleId: cycle.cycle_id,
       selfSummary: selfAppraisalRecord?.summary || "",
       scoreSummary: scoreSummaryRes.rows[0] || null,
+      timeline: {
+        goalsSubmittedAt: appraisal.goals_submitted_at,
+        selfAppraisalSubmittedAt: appraisal.self_appraisal_submitted_at,
+        roRatedAt: appraisal.ro_rated_at,
+        revoRatedAt: appraisal.revo_rated_at,
+        aoAcceptedAt: appraisal.ao_accepted_at,
+        completedAt: appraisal.completed_at
+      },
       persistedAchievementsComplete: true, // Legacy flag for frontend logic if needed
       goals: goalsRes.rows.map((g) => ({
         id: g.goal_id,
