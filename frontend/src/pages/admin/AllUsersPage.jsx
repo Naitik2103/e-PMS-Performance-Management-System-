@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { apiClient } from "../../api/client";
-import { ROLES } from "../../constants/rbac";
 
 const AllUsersPage = () => {
   const [users, setUsers] = useState([]);
@@ -13,12 +12,6 @@ const AllUsersPage = () => {
     try {
       const listRes = await apiClient.get("/users");
       setUsers(listRes.data || []);
-      setRoleDrafts(
-        (listRes.data || []).reduce((acc, user) => {
-          acc[user.id] = user.role;
-          return acc;
-        }, {})
-      );
     } catch {
       setUsers([]);
     }
@@ -27,18 +20,6 @@ const AllUsersPage = () => {
   useEffect(() => {
     loadUsers();
   }, []);
-
-  const updateRole = async (userId) => {
-    setError("");
-    setSuccess("");
-    try {
-      await apiClient.put(`/admin/users/${userId}`, { role: roleDrafts[userId] });
-      setSuccess("Role updated.");
-      loadUsers();
-    } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.message || "Unable to update role");
-    }
-  };
 
   const handleEdit = (user) => {
     setEditingUser(user);
@@ -56,7 +37,6 @@ const AllUsersPage = () => {
   };
 
   const saveProfile = async () => {
-    setError("");
     setSuccess("");
     setFormError("");
     
@@ -81,7 +61,6 @@ const AllUsersPage = () => {
         <div className="card-header">
           <h2>All Users</h2>
         </div>
-        {error && <div className="error-text">{error}</div>}
         {success && <div className="success-text">{success}</div>}
         <div className="table-wrap">
           <table className="table">
@@ -90,7 +69,6 @@ const AllUsersPage = () => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Department</th>
-                <th>Role</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -101,19 +79,7 @@ const AllUsersPage = () => {
                   <td>{user.email}</td>
                   <td>{user.department || <span className="muted">-</span>}</td>
                   <td>
-                    <select value={roleDrafts[user.id] || user.role} onChange={(e) => setRoleDrafts((prev) => ({ ...prev, [user.id]: e.target.value }))}>
-                      <option value={ROLES.EMPLOYEE}>Employee</option>
-                      <option value={ROLES.REPORTING_OFFICER}>Reporting Officer</option>
-                      <option value={ROLES.REVIEWING_OFFICER}>Reviewing Officer</option>
-                      <option value={ROLES.ACCEPTING_OFFICER}>Accepting Officer</option>
-                      <option value={ROLES.HR_ADMIN}>HR Admin</option>
-                    </select>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <button className="btn ghost" type="button" onClick={() => updateRole(user.id)}>Save Role</button>
-                      <button className="btn outline" type="button" onClick={() => handleEdit(user)}>Edit Profile</button>
-                    </div>
+                    <button className="btn outline" type="button" onClick={() => handleEdit(user)}>Edit Profile</button>
                   </td>
                 </tr>
               ))}

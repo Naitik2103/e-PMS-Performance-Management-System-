@@ -158,7 +158,6 @@ const updateUser = async (req, res, next) => {
 
     const departmentId =
       req.body.department !== undefined ? await ensureDepartmentId(req.body.department) : existing.rows[0].department_id;
-    const normalizedRole = req.body.role !== undefined ? normalizeRole(req.body.role) : existing.rows[0].role;
 
     const reportingTo = req.body.reportingTo !== undefined ? req.body.reportingTo || null : existing.rows[0].ro_id;
     const reviewingOfficerId =
@@ -177,19 +176,18 @@ const updateUser = async (req, res, next) => {
     const updated = await pool.query(
       `
       UPDATE users SET
-        role = $2,
-        department_id = $3,
-        ro_id = $4,
-        rew_id = $5,
-        ao_id = $6,
-        first_name = $7,
-        last_name = $8,
-        phone = $9,
+        department_id = $2,
+        ro_id = $3,
+        rew_id = $4,
+        ao_id = $5,
+        first_name = $6,
+        last_name = $7,
+        phone = $8,
         updated_at = NOW()
       WHERE user_id = $1
       RETURNING user_id, first_name, last_name, email, role, department_id, ro_id, rew_id, ao_id, is_active, phone
       `,
-      [id, normalizedRole, departmentId, reportingTo, reviewingOfficerId, acceptingOfficerId, firstName, lastName, phone]
+      [id, departmentId, reportingTo, reviewingOfficerId, acceptingOfficerId, firstName, lastName, phone]
     );
 
     const row = updated.rows[0];
