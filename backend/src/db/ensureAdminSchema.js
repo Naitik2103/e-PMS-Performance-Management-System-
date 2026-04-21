@@ -295,6 +295,7 @@ const ensureAdminSchema = async (pool) => {
     if (submitCol[0]?.is_nullable === 'NO') {
       await pool.query(`ALTER TABLE six_month_review ALTER COLUMN submitted_at DROP NOT NULL`);
     }
+  }
   // ── Per-rater score breakdown columns in score_summary ───────────────────────
   // 5 sub-scores × 3 roles = 15 new columns.  ADD COLUMN IF NOT EXISTS is safe
   // to run on every server start (idempotent).
@@ -320,6 +321,9 @@ const ensureAdminSchema = async (pool) => {
       `ALTER TABLE score_summary ADD COLUMN IF NOT EXISTS ${col} numeric NULL`
     );
   }
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS score_summary_appraisal_id_uq ON score_summary(appraisal_id)`
+  );
 };
 
 export { ensureAdminSchema };

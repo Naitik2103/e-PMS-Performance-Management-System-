@@ -164,7 +164,7 @@ const computeScore = async (appraisalId, { actorId, transaction } = {}) => {
       INSERT INTO score_summary (
         appraisal_id, rater_role, 
         kpa_score, values_avg, competencies_avg, personal_qualities_avg, knowledge_avg,
-        ro_score, rew_score, ao_score, final_score, grade, is_final,
+        ro_score, rew_score, ao_score, overall_score, final_score, grade, is_final,
         ro_kpa_score, ro_values_avg, ro_competencies_avg, ro_personal_avg, ro_knowledge_avg,
         revo_kpa_score, revo_values_avg, revo_competencies_avg, revo_personal_avg, revo_knowledge_avg,
         ao_kpa_score, ao_values_avg, ao_competencies_avg, ao_personal_avg, ao_knowledge_avg,
@@ -172,7 +172,7 @@ const computeScore = async (appraisalId, { actorId, transaction } = {}) => {
       ) VALUES (
         $1, 'system',
         $2, $3, $4, $5, $6,
-        $7, $8, $9, $10, $11, $12,
+        $7, $8, $9, 0, $10, $11, $12,
         $13, $14, $15, $16, $17,
         $18, $19, $20, $21, $22,
         $23, $24, $25, $26, $27,
@@ -187,6 +187,7 @@ const computeScore = async (appraisalId, { actorId, transaction } = {}) => {
         ro_score = EXCLUDED.ro_score,
         rew_score = EXCLUDED.rew_score,
         ao_score = EXCLUDED.ao_score,
+        overall_score = EXCLUDED.overall_score,
         final_score = EXCLUDED.final_score,
         grade = EXCLUDED.grade,
         is_final = EXCLUDED.is_final,
