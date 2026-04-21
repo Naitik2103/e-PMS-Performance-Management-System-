@@ -24,6 +24,7 @@ const Reviews = () => {
   const [persistedAchievementsComplete, setPersistedAchievementsComplete] = useState(false);
   const [currentAppraisalStatus, setCurrentAppraisalStatus] = useState("");
   const [appraisalAttributeRatings, setAppraisalAttributeRatings] = useState([]);
+  const [appraisalScoreSummary, setAppraisalScoreSummary] = useState(null);
   const [selectedReview, setSelectedReview] = useState(null);
   const [selectedReviewGoals, setSelectedReviewGoals] = useState([]);
   const [selectedReviewInputs, setSelectedReviewInputs] = useState({});
@@ -169,8 +170,9 @@ const Reviews = () => {
         acc[`${response.data?.appraisalId || ""}-${goal.id}`] = goal.achievementText || "";
         return acc;
       }, {});
-      setAchievementInputs(achievementMap);
+       setAchievementInputs(achievementMap);
       setAppraisalAttributeRatings(response.data?.attributeRatings || []);
+      setAppraisalScoreSummary(response.data?.scoreSummary || null);
     } catch (err) {
       console.error("Failed to load goals:", err);
       setAppraisalGoals([]);
@@ -496,6 +498,85 @@ const Reviews = () => {
             <h2>Annual Goals</h2>
             <span className="muted">Original goal, six-month note, and final achievement</span>
           </div>
+
+          {/* New Performance Overview Dashboard */}
+          {activeRole === ROLES.EMPLOYEE && appraisalScoreSummary && (
+            <div style={{ margin: "20px", padding: "20px", background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "20px" }}>
+                <div style={{ flex: "1 1 300px" }}>
+                  <h3 style={{ margin: "0 0 16px 0", color: "#334155", fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Your Final Performance Result</h3>
+                  <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+                    <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "4px solid #3b82f6", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}>
+                      <span style={{ fontSize: "20px", fontWeight: "800", color: "#1e3a8a" }}>{Number(appraisalScoreSummary.final_score || 0).toFixed(2)}</span>
+                      <span style={{ fontSize: "10px", color: "#64748b", fontWeight: "600" }}>SCORE</span>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: "24px", fontWeight: "700", color: "#0f172a" }}>{appraisalScoreSummary.grade || "Processing..." }</div>
+                      <div style={{ color: "#64748b", fontSize: "14px" }}>Computed across all attributes and raters</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ flex: "1 1 400px" }}>
+                  <h3 style={{ margin: "0 0 16px 0", color: "#334155", fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Weighted KPA Score (By Rater)</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+                    {[
+                      { label: "RO", score: appraisalScoreSummary.ro_kpa_score, color: "#2563eb" },
+                      { label: "RevO", score: appraisalScoreSummary.revo_kpa_score, color: "#7c3aed" },
+                      { label: "AO", score: appraisalScoreSummary.ao_kpa_score, color: "#4f46e5" }
+                    ].map(r => (
+                      <div key={r.label} style={{ background: "#fff", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", textAlign: "center" }}>
+                        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600", marginBottom: "4px" }}>{r.label}</div>
+                        <div style={{ fontSize: "18px", fontWeight: "700", color: r.color }}>{Number(r.score || 0).toFixed(2)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ margin: "10px 0 0 0", fontSize: "11px", color: "#94a3b8", textAlign: "right" }}>* Weighted based on goal priorities and officer input.</p>
+                </div>
+              </div>
+
+              {/* Visual Performance Comparison Chart (Refined) */}
+              <div style={{ marginTop: "30px", pt: "20px", borderTop: "1px dashed #cbd5e1" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <h3 style={{ margin: 0, color: "#334155", fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Comparative Performance Analysis</h3>
+                  <div style={{ display: "flex", gap: "16px", fontSize: "11px", fontWeight: "600" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "8px", height: "8px", background: "#2563eb", borderRadius: "2px" }}></span> RO</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "8px", height: "8px", background: "#7c3aed", borderRadius: "2px" }}></span> RevO</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}><span style={{ width: "8px", height: "8px", background: "#4f46e5", borderRadius: "2px" }}></span> AO</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                  {[
+                    { label: "KPA (Goals)", ro: appraisalScoreSummary.ro_kpa_score, revo: appraisalScoreSummary.revo_kpa_score, ao: appraisalScoreSummary.ao_kpa_score },
+                    { label: "Core Values", ro: appraisalScoreSummary.ro_values_avg, revo: appraisalScoreSummary.revo_values_avg, ao: appraisalScoreSummary.ao_values_avg },
+                    { label: "Competencies", ro: appraisalScoreSummary.ro_competencies_avg, revo: appraisalScoreSummary.revo_competencies_avg, ao: appraisalScoreSummary.ao_competencies_avg },
+                    { label: "Personal Qualities", ro: appraisalScoreSummary.ro_personal_avg, revo: appraisalScoreSummary.revo_personal_avg, ao: appraisalScoreSummary.ao_personal_avg },
+                    { label: "Knowledge", ro: appraisalScoreSummary.ro_knowledge_avg, revo: appraisalScoreSummary.revo_knowledge_avg, ao: appraisalScoreSummary.ao_knowledge_avg }
+                  ].map((cat) => (
+                    <div key={cat.label} style={{ display: "grid", gridTemplateColumns: "150px 1fr", alignItems: "center", gap: "20px" }}>
+                      <div style={{ fontSize: "12px", fontWeight: "600", color: "#475569" }}>{cat.label}</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+                        {[
+                          { val: cat.ro, color: "#2563eb", bg: "#dbeafe" },
+                          { val: cat.revo, color: "#7c3aed", bg: "#ede9fe" },
+                          { val: cat.ao, color: "#4f46e5", bg: "#e0e7ff" }
+                        ].map((bar, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <div style={{ flex: 1, height: "8px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden" }}>
+                              <div style={{ width: `${(Number(bar.val || 0) / 5) * 100}%`, height: "100%", background: bar.color, borderRadius: "4px", transition: "width 1s ease-out" }}></div>
+                            </div>
+                            <span style={{ fontSize: "11px", fontWeight: "700", color: bar.color, width: "30px", textAlign: "right" }}>{Number(bar.val || 0).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {isSelfAppraisalLocked && (
             <div className="annual-rating-lock-note">
               Self-appraisal already submitted. Annual goals are now locked.
@@ -609,10 +690,19 @@ const Reviews = () => {
                 const catAttrs = attributeMasters.filter(a => a.category === cat);
                 
                 const calculateAverage = (category, role) => {
-                  const relevantRatings = appraisalAttributeRatings.filter(r => r.category === category && String(r.ratedByRole) === String(role));
-                  if (relevantRatings.length === 0) return "0.00";
-                  const sum = relevantRatings.reduce((s, r) => s + Number(r.rating || 0), 0);
-                  return (sum / relevantRatings.length).toFixed(2);
+                  if (!appraisalScoreSummary) return "0.00";
+                  
+                  // Map category and role to DB column name
+                  const rolePrefix = role === ROLES.REPORTING_OFFICER ? "ro" : 
+                                     role === ROLES.REVIEWING_OFFICER ? "revo" : "ao";
+                  
+                  // Handle potential variations in category strings
+                  let catKey = category.toLowerCase().replace(/ /g, "_");
+                  if (catKey === "personal_qualities") catKey = "personal"; // DB column is ro_personal_avg
+                  
+                  const colName = `${rolePrefix}_${catKey}_avg`;
+                  const val = appraisalScoreSummary[colName];
+                  return val ? Number(val).toFixed(2) : "0.00";
                 };
 
                 return (

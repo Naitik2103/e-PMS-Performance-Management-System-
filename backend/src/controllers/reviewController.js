@@ -1175,11 +1175,17 @@ const getMyGoalsForYearEnd = async (req, res, next) => {
       [appraisal.id]
     );
 
+    const scoreSummaryRes = await pool.query(
+      "SELECT * FROM score_summary WHERE appraisal_id = $1",
+      [appraisal.id]
+    );
+
     return res.json({
       appraisalId: appraisal.id,
       appraisalStatus: appraisal.status,
       cycleId: cycle.cycle_id,
       selfSummary: selfAppraisalRecord?.summary || "",
+      scoreSummary: scoreSummaryRes.rows[0] || null,
       persistedAchievementsComplete: true, // Legacy flag for frontend logic if needed
       goals: goalsRes.rows.map((g) => ({
         id: g.goal_id,
