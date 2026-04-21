@@ -12,6 +12,7 @@ import {
   activateCycle,
   updateCycle
 } from "../controllers/adminHrController.js";
+import { getDashboardAnalytics as getDashboardStats } from "../controllers/analyticsController.js";
 import pool from "../config/db.js";
 
 const router = express.Router();
@@ -37,6 +38,7 @@ router.get("/cycles/:cycleId/participants", getCycleParticipants);
 router.put("/cycles/:cycleId/participants", bulkSaveParticipants);
 router.put("/cycles/:cycleId/activate", activateCycle);
 router.put("/cycles/:id", updateCycle);
+router.get("/analytics/dashboard-stats", getDashboardStats);
 
 router.put("/cycles/:id/close", async (req, res, next) => {
   try {

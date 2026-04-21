@@ -17,6 +17,7 @@ import AdminUsersHubPage from "./pages/admin/AdminUsersHubPage";
 import AdminPlaceholderPage from "./pages/admin/AdminPlaceholderPage";
 import AllUsersPage from "./pages/admin/AllUsersPage";
 import ReportingHierarchyPage from "./pages/admin/ReportingHierarchyPage";
+import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard";
 import Unauthorized from "./pages/Unauthorized";
 import { appRoutes } from "./rbac/accessMap";
 import { useAuth } from "./context/AuthContext";
@@ -44,7 +45,7 @@ const App = () => {
     "/admin/departments": (
       <AdminPlaceholderPage title="Departments & Designations" description="Manage department and designation master data." />
     ),
-    "/admin/analytics": <AdminPlaceholderPage title="Analytics" description="Workforce and appraisal analytics will appear here." />,
+    "/admin/analytics": <AnalyticsDashboard />,
     "/admin/audit": <AdminPlaceholderPage title="Audit log" description="View administrative actions across the system." />,
     "/admin/all-users": <AllUsersPage />,
     "/admin/hierarchy": <ReportingHierarchyPage />,
