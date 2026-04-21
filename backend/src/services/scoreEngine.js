@@ -1,116 +1,234 @@
 import pool from "../config/db.js";
 import { writeAudit } from "./auditService.js";
+import { ROLES, normalizeRole } from "../constants/rbac.js";
 
-const avg = (rows) => {
-  if (!rows.length) return 0;
-  return rows.reduce((s, r) => s + Number(r.score || r.rating || 0), 0) / rows.length;
+const toNumber = (v) => Number(v || 0);
+const roundTo = (num, decimals = 4) => {
+  const factor = Math.pow(10, decimals);
+  return Math.round((num + Number.EPSILON) * factor) / factor;
+};
+
+const getWeights = () => ({
+  KPA: toNumber(process.env.KPA_WEIGHT),
+  COMPETENCIES: toNumber(process.env.COMPETENCIES_WEIGHT),
+  VALUES: toNumber(process.env.VALUES_WEIGHT),
+  PERSONAL: toNumber(process.env.PERSONAL_ATTRIBUTES_WEIGHT),
+  KNOWLEDGE: toNumber(process.env.KNOWLEDGE_WEIGHT),
+});
+
+const getRoleWeights = () => {
+  const ro = process.env.RO_WEIGHT;
+  const revo = process.env.REVO_WEIGHT;
+  const ao = process.env.AO_WEIGHT;
+  if (ro !== undefined && revo !== undefined && ao !== undefined) {
+    return {
+      RO: toNumber(ro),
+      REVO: toNumber(revo),
+      AO: toNumber(ao),
+    };
+  }
+  return { RO: 1 / 3, REVO: 1 / 3, AO: 1 / 3 };
+};
+
+const mapGrade = (score) => {
+  if (score >= 4.5) return "Outstanding";
+  if (score >= 3.5) return "Very Good";
+  if (score >= 2.5) return "Good";
+  if (score >= 1.5) return "Average";
+  return "Needs Improvement";
 };
 
 const computeScore = async (appraisalId, { actorId, transaction } = {}) => {
   const client = transaction || pool;
   try {
-    const appRes = await client.query("SELECT id FROM appraisals WHERE id = $1 LIMIT 1", [appraisalId]);
-    if (!appRes.rows.length) throw new Error("Appraisal not found");
-
-    const kpa = await client.query(
-      "SELECT ro_rating, revo_rating, ao_rating FROM appraisal_ratings WHERE appraisal_id = $1",
+    const appRes = await client.query(
+      "SELECT id, status FROM appraisals WHERE id = $1 LIMIT 1",
       [appraisalId]
     );
-    const attrs = await client.query(
+    if (!appRes.rows.length) throw new Error("Appraisal not found");
+    const appraisal = appRes.rows[0];
+
+    // 1. Fetch Goals for KPA calculation
+    const goalsRes = await client.query(
+      "SELECT goal_id, weightage FROM goals WHERE appraisal_id = $1",
+      [appraisalId]
+    );
+    const goals = goalsRes.rows;
+
+    // 2. Fetch Ratings
+    const kpaRatingsRes = await client.query(
+      "SELECT goal_id, ro_rating, revo_rating, ao_rating FROM appraisal_ratings WHERE appraisal_id = $1",
+      [appraisalId]
+    );
+    const kpaRatings = kpaRatingsRes.rows;
+
+    const attrRatingsRes = await client.query(
       "SELECT rater_role, rating, category FROM quantitative_attribute_rating WHERE appraisal_id = $1",
       [appraisalId]
     );
+    const attrRatings = attrRatingsRes.rows;
 
-    const roScore = avg([
-      ...kpa.rows.map((r) => ({ score: r.ro_rating })),
-      ...attrs.rows.filter((r) => ["reporting_officer", "ReportingOfficer"].includes(r.rater_role))
-    ]);
-    const rewScore = avg([
-      ...kpa.rows.map((r) => ({ score: r.revo_rating })),
-      ...attrs.rows.filter((r) => ["reviewing_officer", "ReviewingOfficer"].includes(r.rater_role))
-    ]);
-    const aoScore = avg([
-      ...kpa.rows.map((r) => ({ score: r.ao_rating })),
-      ...attrs.rows.filter((r) => ["accepting_officer", "AcceptingOfficer"].includes(r.rater_role))
-    ]);
-
-    const finalScore = roScore * 0.7 + rewScore * 0.1 + aoScore * 0.2;
-
-    const getCategoryAvg = (ratings, roleKeywords, catKeyword) => {
-      const filtered = ratings.filter(r => roleKeywords.includes(r.rater_role) && String(r.category || "").toLowerCase().includes(catKeyword));
-      return avg(filtered);
+    // Helper for category averages
+    const getCategoryAvg = (ratings, role, category) => {
+      const normalizedTargetRole = normalizeRole(role);
+      const filtered = ratings.filter(
+        (r) =>
+          normalizeRole(r.rater_role) === normalizedTargetRole &&
+          String(r.category || "")
+            .toLowerCase()
+            .trim() === category.toLowerCase().trim()
+      );
+      if (!filtered.length) return 0;
+      const sum = filtered.reduce((acc, r) => acc + toNumber(r.rating), 0);
+      return roundTo(sum / filtered.length);
     };
 
-    const roVals = getCategoryAvg(attrs.rows, ["reporting_officer", "ReportingOfficer"], "values");
-    const rewVals = getCategoryAvg(attrs.rows, ["reviewing_officer", "ReviewingOfficer"], "values");
-    const aoVals = getCategoryAvg(attrs.rows, ["accepting_officer", "AcceptingOfficer"], "values");
-    const valuesAvg = roVals * 0.7 + rewVals * 0.1 + aoVals * 0.2;
-
-    const roComp = getCategoryAvg(attrs.rows, ["reporting_officer", "ReportingOfficer"], "competen");
-    const rewComp = getCategoryAvg(attrs.rows, ["reviewing_officer", "ReviewingOfficer"], "competen");
-    const aoComp = getCategoryAvg(attrs.rows, ["accepting_officer", "AcceptingOfficer"], "competen");
-    const competenciesAvg = roComp * 0.7 + rewComp * 0.1 + aoComp * 0.2;
-
-    const roPers = getCategoryAvg(attrs.rows, ["reporting_officer", "ReportingOfficer"], "personal");
-    const rewPers = getCategoryAvg(attrs.rows, ["reviewing_officer", "ReviewingOfficer"], "personal");
-    const aoPers = getCategoryAvg(attrs.rows, ["accepting_officer", "AcceptingOfficer"], "personal");
-    const personalQualitiesAvg = roPers * 0.7 + rewPers * 0.1 + aoPers * 0.2;
-
-    const roKnow = getCategoryAvg(attrs.rows, ["reporting_officer", "ReportingOfficer"], "knowledge");
-    const rewKnow = getCategoryAvg(attrs.rows, ["reviewing_officer", "ReviewingOfficer"], "knowledge");
-    const aoKnow = getCategoryAvg(attrs.rows, ["accepting_officer", "AcceptingOfficer"], "knowledge");
-    const knowledgeAvg = roKnow * 0.7 + rewKnow * 0.1 + aoKnow * 0.2;
-
-    const roKpa = avg(kpa.rows.map(r => ({ score: r.ro_rating })));
-    const rewKpa = avg(kpa.rows.map(r => ({ score: r.revo_rating })));
-    const aoKpa = avg(kpa.rows.map(r => ({ score: r.ao_rating })));
-    const kpaScore = roKpa * 0.7 + rewKpa * 0.1 + aoKpa * 0.2;
-    
-    // Check if score columns exist before updating
-    const colsRes = await client.query(
-      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'appraisals'"
-    );
-    const cols = new Set(colsRes.rows.map(r => r.column_name));
-    
-    if (cols.has("ro_score") && cols.has("final_score")) {
-      await client.query(
-        "UPDATE appraisals SET ro_score = $1, revo_score = $2, ao_score = $3, final_score = $4, updated_at = NOW() WHERE id = $5",
-        [roScore, rewScore, aoScore, finalScore, appraisalId]
-      );
-    }
-
-    // Insert/Update score_summary table
-    const ssTableRes = await client.query("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'score_summary')");
-    if (ssTableRes.rows[0].exists) {
-      const ssRes = await client.query("SELECT id FROM score_summary WHERE appraisal_id = $1 LIMIT 1", [appraisalId]);
-      if (ssRes.rows.length) {
-        await client.query(
-          "UPDATE score_summary SET kpa_score = $1, values_avg = $2, competencies_avg = $3, personal_qualities_avg = $4, knowledge_avg = $5, ro_score = $6, rew_score = $7, ao_score = $8, final_score = $9, updated_at = NOW() WHERE id = $10",
-          [kpaScore, valuesAvg, competenciesAvg, personalQualitiesAvg, knowledgeAvg, roScore, rewScore, aoScore, finalScore, ssRes.rows[0].id]
-        );
-      } else {
-        await client.query(`
-          INSERT INTO score_summary (
-            appraisal_id, rater_role, kpa_score, values_avg, competencies_avg, 
-            personal_qualities_avg, knowledge_avg, ro_score, rew_score, ao_score, 
-            overall_score, final_score, is_final
-          ) VALUES (
-            $1, 'system', $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, false
-          )
-        `, [appraisalId, kpaScore, valuesAvg, competenciesAvg, personalQualitiesAvg, knowledgeAvg, roScore, rewScore, aoScore, finalScore]);
+    // Helper for KPA weighted score
+    const getKpaScore = (ratings, roleField) => {
+      if (!goals.length) return 0;
+      let totalWeightedRating = 0;
+      for (const goal of goals) {
+        const ratingRow = ratings.find((r) => r.goal_id === goal.goal_id);
+        const rating = toNumber(ratingRow ? ratingRow[roleField] : 0);
+        const weight = toNumber(goal.weightage);
+        totalWeightedRating += weight * rating;
       }
+      return roundTo(totalWeightedRating / 100);
+    };
+
+    const roles = [
+      { role: ROLES.REPORTING_OFFICER, field: "ro" },
+      { role: ROLES.REVIEWING_OFFICER, field: "revo" },
+      { role: ROLES.ACCEPTING_OFFICER, field: "ao" },
+    ];
+
+    const results = {};
+    const weights = getWeights();
+
+    for (const r of roles) {
+      const kpaScore = getKpaScore(kpaRatings, `${r.field}_rating`);
+      const valAvg = getCategoryAvg(attrRatings, r.role, "values");
+      const compAvg = getCategoryAvg(attrRatings, r.role, "competencies");
+      const persAvg = getCategoryAvg(attrRatings, r.role, "personal_qualities");
+      const knowAvg = getCategoryAvg(attrRatings, r.role, "knowledge");
+
+      const overall = roundTo(
+        kpaScore * weights.KPA +
+        valAvg * weights.VALUES +
+        compAvg * weights.COMPETENCIES +
+        persAvg * weights.PERSONAL +
+        knowAvg * weights.KNOWLEDGE
+      );
+
+      results[r.field] = {
+        kpa: kpaScore,
+        values: valAvg,
+        competencies: compAvg,
+        personal: persAvg,
+        knowledge: knowAvg,
+        overall: overall,
+      };
     }
+
+    const roleWeights = getRoleWeights();
+    const finalScore = roundTo(
+      results.ro.overall * roleWeights.RO +
+      results.revo.overall * roleWeights.REVO +
+      results.ao.overall * roleWeights.AO
+    );
+
+    const grade = mapGrade(finalScore);
+
+    // Blended averages for legacy compatibility (simple average or weighted?)
+    // User wants these stored, so we'll store the direct blended averages too.
+    const blended = {
+      kpa: roundTo((results.ro.kpa + results.revo.kpa + results.ao.kpa) / 3),
+      values: roundTo((results.ro.values + results.revo.values + results.ao.values) / 3),
+      competencies: roundTo(
+        (results.ro.competencies +
+          results.revo.competencies +
+          results.ao.competencies) /
+        3
+      ),
+      personal: roundTo((results.ro.personal + results.revo.personal + results.ao.personal) / 3),
+      knowledge: roundTo(
+        (results.ro.knowledge + results.revo.knowledge + results.ao.knowledge) /
+        3
+      ),
+    };
+
+    // 3. Persist to score_summary
+    const isFinal = appraisal.status === "completed" || appraisal.status === "ao_accepted";
+    
+    const ssUpsertQuery = `
+      INSERT INTO score_summary (
+        appraisal_id, rater_role, 
+        kpa_score, values_avg, competencies_avg, personal_qualities_avg, knowledge_avg,
+        ro_score, rew_score, ao_score, final_score, grade, is_final,
+        ro_kpa_score, ro_values_avg, ro_competencies_avg, ro_personal_avg, ro_knowledge_avg,
+        revo_kpa_score, revo_values_avg, revo_competencies_avg, revo_personal_avg, revo_knowledge_avg,
+        ao_kpa_score, ao_values_avg, ao_competencies_avg, ao_personal_avg, ao_knowledge_avg,
+        computed_at, created_at, updated_at
+      ) VALUES (
+        $1, 'system',
+        $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12,
+        $13, $14, $15, $16, $17,
+        $18, $19, $20, $21, $22,
+        $23, $24, $25, $26, $27,
+        NOW(), NOW(), NOW()
+      )
+      ON CONFLICT (appraisal_id) DO UPDATE SET
+        kpa_score = EXCLUDED.kpa_score,
+        values_avg = EXCLUDED.values_avg,
+        competencies_avg = EXCLUDED.competencies_avg,
+        personal_qualities_avg = EXCLUDED.personal_qualities_avg,
+        knowledge_avg = EXCLUDED.knowledge_avg,
+        ro_score = EXCLUDED.ro_score,
+        rew_score = EXCLUDED.rew_score,
+        ao_score = EXCLUDED.ao_score,
+        final_score = EXCLUDED.final_score,
+        grade = EXCLUDED.grade,
+        is_final = EXCLUDED.is_final,
+        ro_kpa_score = EXCLUDED.ro_kpa_score,
+        ro_values_avg = EXCLUDED.ro_values_avg,
+        ro_competencies_avg = EXCLUDED.ro_competencies_avg,
+        ro_personal_avg = EXCLUDED.ro_personal_avg,
+        ro_knowledge_avg = EXCLUDED.ro_knowledge_avg,
+        revo_kpa_score = EXCLUDED.revo_kpa_score,
+        revo_values_avg = EXCLUDED.revo_values_avg,
+        revo_competencies_avg = EXCLUDED.revo_competencies_avg,
+        revo_personal_avg = EXCLUDED.revo_personal_avg,
+        revo_knowledge_avg = EXCLUDED.revo_knowledge_avg,
+        ao_kpa_score = EXCLUDED.ao_kpa_score,
+        ao_values_avg = EXCLUDED.ao_values_avg,
+        ao_competencies_avg = EXCLUDED.ao_competencies_avg,
+        ao_personal_avg = EXCLUDED.ao_personal_avg,
+        ao_knowledge_avg = EXCLUDED.ao_knowledge_avg,
+        updated_at = NOW()
+    `;
+
+    await client.query(ssUpsertQuery, [
+      appraisalId,
+      blended.kpa, blended.values, blended.competencies, blended.personal, blended.knowledge,
+      results.ro.overall, results.revo.overall, results.ao.overall,
+      finalScore, grade, isFinal,
+      results.ro.kpa, results.ro.values, results.ro.competencies, results.ro.personal, results.ro.knowledge,
+      results.revo.kpa, results.revo.values, results.revo.competencies, results.revo.personal, results.revo.knowledge,
+      results.ao.kpa, results.ao.values, results.ao.competencies, results.ao.personal, results.ao.knowledge
+    ]);
 
     await writeAudit({
-      user: { userId: actorId, role: 'ReportingOfficer' },
-      action: "appraisal_completed",
+      user: { userId: actorId, role: ROLES.REPORTING_OFFICER }, // Generic actor for background audit
+      action: isFinal ? "appraisal_completed_final" : "appraisal_score_updated",
       entity: "appraisal",
       entityId: appraisalId,
-      details: { roScore, rewScore, aoScore, finalScore }
+      details: { finalScore, grade, isFinal },
     });
 
-    return { roScore, rewScore, aoScore, finalScore };
+    return { roScore: results.ro.overall, rewScore: results.revo.overall, aoScore: results.ao.overall, finalScore, grade };
   } catch (error) {
+    console.error("ScoreEngine calculation error:", error);
     throw error;
   }
 };

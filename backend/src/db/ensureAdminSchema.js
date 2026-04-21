@@ -295,8 +295,31 @@ const ensureAdminSchema = async (pool) => {
     if (submitCol[0]?.is_nullable === 'NO') {
       await pool.query(`ALTER TABLE six_month_review ALTER COLUMN submitted_at DROP NOT NULL`);
     }
+  // ── Per-rater score breakdown columns in score_summary ───────────────────────
+  // 5 sub-scores × 3 roles = 15 new columns.  ADD COLUMN IF NOT EXISTS is safe
+  // to run on every server start (idempotent).
+  const perRaterCols = [
+    "ro_kpa_score",
+    "ro_values_avg",
+    "ro_competencies_avg",
+    "ro_personal_avg",
+    "ro_knowledge_avg",
+    "revo_kpa_score",
+    "revo_values_avg",
+    "revo_competencies_avg",
+    "revo_personal_avg",
+    "revo_knowledge_avg",
+    "ao_kpa_score",
+    "ao_values_avg",
+    "ao_competencies_avg",
+    "ao_personal_avg",
+    "ao_knowledge_avg",
+  ];
+  for (const col of perRaterCols) {
+    await pool.query(
+      `ALTER TABLE score_summary ADD COLUMN IF NOT EXISTS ${col} numeric NULL`
+    );
   }
-
 };
 
 export { ensureAdminSchema };
