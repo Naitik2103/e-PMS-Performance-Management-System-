@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import pool from "../config/db.js";
 import { ROLES, normalizeRole } from "../constants/rbac.js";
 import { writeAudit } from "../services/auditService.js";
+import { notifyAllUsers } from "../services/notificationService.js";
 
 const buildFullName = (firstName, lastName) =>
   [String(firstName || "").trim(), String(lastName || "").trim()].filter(Boolean).join(" ").trim();
@@ -726,7 +727,12 @@ const updateCycle = async (req, res, next) => {
   try {
     const id = req.params.id || req.params.cycleId;
     const current = await pool.query(
-      "SELECT cycle_id, cycle_year, closed_at FROM appraisal_cycles WHERE cycle_id = $1 LIMIT 1",
+      `SELECT 
+        cycle_id, cycle_year, closed_at, cycle_name,
+        goal_setting_start, 
+        six_month_progress_review_start, 
+        annual_appraisal_start 
+       FROM appraisal_cycles WHERE cycle_id = $1 LIMIT 1`,
       [id]
     );
     if (!current.rows.length) {
@@ -776,6 +782,81 @@ const updateCycle = async (req, res, next) => {
       entityId: id,
       details: { ...req.body }
     });
+
+    // Notify users if periods were updated or started
+    const oldData = current.rows[0];
+    const newGoalStart = req.body.goalSettingStart || null;
+    const newGoalEnd = req.body.goalSettingEnd || null;
+    const newSixMonthStart = req.body.sixMonthReviewStart || req.body.sixMonthProgressReviewStart || null;
+    const newSixMonthEnd = req.body.sixMonthReviewEnd || req.body.sixMonthProgressReviewEnd || null;
+    const newAnnualStart = req.body.annualAppraisalStart || null;
+    const newAnnualEnd = req.body.annualAppraisalEnd || null;
+
+    const toInputDate = (d) => (d ? new Date(d).toISOString().split("T")[0] : null);
+    const cycleName = req.body.cycleName || oldData.cycle_name;
+
+    // Goal Setting Notifications
+    if (newGoalStart && toInputDate(newGoalStart) !== toInputDate(oldData.goal_setting_start)) {
+      await notifyAllUsers({
+        title: "Goal Setting Period Started",
+        message: `The Goal Setting period for ${cycleName} is now OPEN. Deadline: ${newGoalEnd ? new Date(newGoalEnd).toLocaleDateString() : 'TBA'}.`,
+        type: "system",
+        entity: "appraisal_cycle",
+        entityId: id,
+        senderId: req.user?.id
+      });
+    } else if (newGoalEnd && toInputDate(newGoalEnd) !== toInputDate(oldData.goal_setting_end)) {
+      await notifyAllUsers({
+        title: "Goal Setting Deadline Updated",
+        message: `The deadline for Goal Setting (${cycleName}) has been updated to ${new Date(newGoalEnd).toLocaleDateString()}.`,
+        type: "system",
+        entity: "appraisal_cycle",
+        entityId: id,
+        senderId: req.user?.id
+      });
+    }
+
+    // Six-Month Review Notifications
+    if (newSixMonthStart && toInputDate(newSixMonthStart) !== toInputDate(oldData.six_month_progress_review_start)) {
+      await notifyAllUsers({
+        title: "Six-Month Review Period Started",
+        message: `The Six-Month Progress Review for ${cycleName} is now OPEN. Deadline: ${newSixMonthEnd ? new Date(newSixMonthEnd).toLocaleDateString() : 'TBA'}.`,
+        type: "system",
+        entity: "appraisal_cycle",
+        entityId: id,
+        senderId: req.user?.id
+      });
+    } else if (newSixMonthEnd && toInputDate(newSixMonthEnd) !== toInputDate(oldData.six_month_progress_review_end)) {
+      await notifyAllUsers({
+        title: "Six-Month Review Deadline Updated",
+        message: `The deadline for Six-Month Review (${cycleName}) has been updated to ${new Date(newSixMonthEnd).toLocaleDateString()}.`,
+        type: "system",
+        entity: "appraisal_cycle",
+        entityId: id,
+        senderId: req.user?.id
+      });
+    }
+
+    // Annual Appraisal Notifications
+    if (newAnnualStart && toInputDate(newAnnualStart) !== toInputDate(oldData.annual_appraisal_start)) {
+      await notifyAllUsers({
+        title: "Annual Appraisal Period Started",
+        message: `The Annual Appraisal period for ${cycleName} is now OPEN. Deadline: ${newAnnualEnd ? new Date(newAnnualEnd).toLocaleDateString() : 'TBA'}.`,
+        type: "system",
+        entity: "appraisal_cycle",
+        entityId: id,
+        senderId: req.user?.id
+      });
+    } else if (newAnnualEnd && toInputDate(newAnnualEnd) !== toInputDate(oldData.annual_appraisal_end)) {
+      await notifyAllUsers({
+        title: "Annual Appraisal Deadline Updated",
+        message: `The deadline for Annual Appraisal (${cycleName}) has been updated to ${new Date(newAnnualEnd).toLocaleDateString()}.`,
+        type: "system",
+        entity: "appraisal_cycle",
+        entityId: id,
+        senderId: req.user?.id
+      });
+    }
 
     return res.json({ message: "Cycle updated successfully" });
   } catch (error) {

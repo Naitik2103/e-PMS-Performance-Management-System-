@@ -3,6 +3,7 @@ import http from "http";
 import app from "./app.js";
 import pool from "./config/db.js";
 import { ensureAdminSchema } from "./db/ensureAdminSchema.js";
+import { startPeriodScheduler } from "./services/periodScheduler.js";
 
 const BASE_PORT = Number(process.env.PORT || 5000);
 
@@ -101,6 +102,9 @@ const startHttpServer = (preferredPort) => {
 
     const { port } = await startHttpServer(BASE_PORT);
     console.log(`Server running on port ${port}`);
+
+    // Start background period monitoring
+    startPeriodScheduler();
   } catch (error) {
     console.error("Failed to connect to Postgres", error);
     process.exit(1);

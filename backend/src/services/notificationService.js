@@ -31,4 +31,22 @@ const notifyUser = async ({ userId, title, message, type, entity = null, entityI
   }
 };
 
-export { notifyUser };
+const notifyAllUsers = async ({ title, message, type, entity = null, entityId = null, senderId = null }) => {
+  try {
+    await pool.query(
+      `
+      INSERT INTO notifications
+        (recipient_id, recipient_email, sender_id, type, subject, body_content, entity_type, entity_id, status, send_at)
+      SELECT user_id, email, $1, $2, $3, $4, $5, $6, 'unread', NOW()
+      FROM users
+      WHERE is_active = true
+      `,
+      [senderId, type, title, message, entity, entityId]
+    );
+  } catch (error) {
+    console.error("Error sending system-wide notification:", error.message);
+    throw error;
+  }
+};
+
+export { notifyUser, notifyAllUsers };
