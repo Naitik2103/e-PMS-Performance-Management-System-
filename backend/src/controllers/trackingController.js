@@ -130,7 +130,7 @@ const submitTracking = async (req, res, next) => {
     );
     const submittedCount = submittedRes.rows[0].count;
 
-    // Notify Reporting Officer
+    // Notify Reporting Officer or Auto-Review for CEO
     const roRow = await pool.query(
       `
       SELECT reporting_officer_id
@@ -141,6 +141,7 @@ const submitTracking = async (req, res, next) => {
       [effectiveCycleId, req.user.id]
     );
     const roId = roRow.rows[0]?.reporting_officer_id || null;
+    
     if (roId) {
       await notifyUser({
         userId: roId,
@@ -151,6 +152,12 @@ const submitTracking = async (req, res, next) => {
         entity: "six_month_review",
         entityId: null
       });
+    } else {
+      // CEO Path: Auto-mark as reviewed
+      await pool.query(
+        "UPDATE six_month_review SET status = 'reviewed', reporting_remarks = 'Auto-reviewed (No RO)', updated_at = NOW() WHERE employee_id = $1 AND cycle_id = $2 AND status = 'submitted'",
+        [req.user.id, effectiveCycleId]
+      );
     }
 
     await writeAudit({ user: req.user, action: "submit", entity: "six_month_review", entityId: null });

@@ -848,10 +848,22 @@ const submitSelfSummary = async (req, res, next) => {
       await ensureGoalRatings({ appraisalId: dbAppraisal.id, goals: goalsRes.rows, providedRatings: goalRatings || [] });
     }
 
+    const isCEO = !dbAppraisal.ro_id;
+    const nextStatus = isCEO ? "completed" : "self_appraisal_done";
+    const completedAt = isCEO ? "NOW()" : "NULL";
+
     await pool.query(
-      "UPDATE appraisals SET status = 'self_appraisal_done', self_appraisal_submitted_at = NOW() WHERE id = $1",
-      [dbAppraisal.id]
+      `UPDATE appraisals SET status = $1, self_appraisal_submitted_at = NOW(), completed_at = ${completedAt} WHERE id = $2`,
+      [nextStatus, dbAppraisal.id]
     );
+
+    if (isCEO) {
+      // For CEO, the self-appraisal table status should also be finalized
+      const selfAppraisalTable = await resolveSelfAppraisalTable();
+      await pool.query(`UPDATE ${selfAppraisalTable} SET status = 'ao_finalized', updated_at = NOW() WHERE appraisal_id = $1`, [
+        dbAppraisal.id
+      ]);
+    }
 
     const employee = await pool.query(
       "SELECT first_name, last_name, email FROM users WHERE user_id = $1 LIMIT 1",

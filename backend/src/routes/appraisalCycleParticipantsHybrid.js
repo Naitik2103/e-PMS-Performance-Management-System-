@@ -87,7 +87,7 @@ router.put("/appraisal-cycles/:cycleId/participants/:employeeId", async (req, re
     // Hard validations (duplicates/self).
     const hardErrors = [];
     const ids = [ro, revo, ao].filter(Boolean);
-    if (ids.length !== new Set(ids).size) hardErrors.push("ro_id, revo_id, and ao_id must be different.");
+    // Rule removed: RO, RevO, and AO CAN be the same person now to allow for cascading.
     if (ro && ro === employee) hardErrors.push("ro_id cannot equal employee_id.");
     if (revo && revo === employee) hardErrors.push("revo_id cannot equal employee_id.");
     if (ao && ao === employee) hardErrors.push("ao_id cannot equal employee_id.");
@@ -131,6 +131,13 @@ router.put("/appraisal-cycles/:cycleId/participants/:employeeId", async (req, re
     const usersById = new Map(users.map((u) => [String(u.id), u]));
     const warnings = softLevelWarnings(usersById, ro, revo, ao);
 
+    // RATER CASCADE LOGIC:
+    // 1. If RevO is blank, it MUST follow RO.
+    const finalRevo = revo || ro;
+    // 2. If AO is blank, it MUST follow RevO.
+    const finalAo = ao || finalRevo;
+
+    // 1. Update the Participant mapping table
     const upd = await pool.query(
       `
       UPDATE appraisal_cycle_participants
@@ -141,11 +148,32 @@ router.put("/appraisal-cycles/:cycleId/participants/:employeeId", async (req, re
         updated_at = NOW()
       WHERE cycle_id = $1 AND employee_id = $2
       `,
-      [cycleId, employee, ro, revo, ao]
+      [cycleId, employee, ro, finalRevo, finalAo]
     );
 
     if (upd.rowCount === 0) return res.status(404).json({ error: "Participant not found for this cycle." });
-    return res.json({ employee_id: employee, ro_id: ro, revo_id: revo, ao_id: ao, warnings });
+
+    // 2. Sync to active appraisals table
+    // Ensures mid-cycle hierarchy changes are reflected on the dashboard immediately.
+    await pool.query(
+      `
+      UPDATE appraisals
+      SET
+        ro_id = $3,
+        revo_id = $4,
+        ao_id = $5
+      WHERE employee_id = $1 AND cycle_id = $2
+      `,
+      [employee, cycleId, ro, finalRevo, finalAo]
+    );
+
+    return res.json({ 
+      employee_id: employee, 
+      ro_id: ro, 
+      revo_id: finalRevo, 
+      ao_id: finalAo, 
+      warnings 
+    });
   } catch (e) {
     return next(e);
   }

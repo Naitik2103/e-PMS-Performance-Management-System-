@@ -523,27 +523,8 @@ const bulkSaveParticipants = async (req, res, next) => {
       const revo = p.reviewingOfficerId || null;
       const ao = p.acceptingOfficerId || null;
 
-      if (
-        ro &&
-        revo &&
-        (String(revo) === String(ro) || isUnderOfficer(revo, ro) || isUnderOfficerInCurrentCycle(revo, ro))
-      ) {
-        hierarchyErrors.push(`${employeeName}: selected Reviewing Officer is in the selected Reporting Officer chain`);
-      }
-      if (
-        ro &&
-        ao &&
-        (String(ao) === String(ro) || isUnderOfficer(ao, ro) || isUnderOfficerInCurrentCycle(ao, ro))
-      ) {
-        hierarchyErrors.push(`${employeeName}: selected Accepting Officer is in the selected Reporting Officer chain`);
-      }
-      if (
-        revo &&
-        ao &&
-        (String(ao) === String(revo) || isUnderOfficer(ao, revo) || isUnderOfficerInCurrentCycle(ao, revo))
-      ) {
-        hierarchyErrors.push(`${employeeName}: selected Accepting Officer is in the selected Reviewing Officer chain`);
-      }
+    // Rule removed: RO, RevO, and AO can be the same person now to allow for cascading.
+    // The previous logic blocked same-user assignments which are now permitted.
     }
     if (hierarchyErrors.length > 0) {
       return res.status(422).json({ errors: hierarchyErrors });
@@ -553,45 +534,104 @@ const bulkSaveParticipants = async (req, res, next) => {
     try {
       await client.query("BEGIN");
       for (const p of participants) {
-        const r = await client.query(
-          `
-          UPDATE appraisal_cycle_participants
-          SET
-            reporting_officer_id = $3,
-            reviewing_officer_id = $4,
-            accepting_officer_id = $5,
-            updated_at = NOW()
-          WHERE id = $1 AND cycle_id = $2
-          `,
-          [
-            p.participantId,
-            cycleId,
-            p.reportingOfficerId || null,
-            p.reviewingOfficerId || null,
-            p.acceptingOfficerId || null
-          ]
-        );
-        if (r.rowCount === 0) {
-          await client.query("ROLLBACK");
-          return res.status(400).json({ error: "Participant not found for this cycle" });
+        // Robust data extraction (handles all possible frontend field naming)
+        const getVal = (...keys) => {
+          for (const k of keys) {
+            if (p[k] !== undefined && p[k] !== null) {
+              const s = String(p[k]).trim();
+              const sl = s.toLowerCase();
+              if (s !== "" && sl !== "null" && sl !== "undefined" && sl !== "none") return s;
+            }
+          }
+          return null;
+        };
+
+        const partId = getVal("participantId", "participant_id", "id");
+        const empId = getVal("employeeId", "employee_id", "userId");
+        let ro = getVal("reportingOfficerId", "reporting_officer_id", "roId");
+        let revo = getVal("reviewingOfficerId", "reviewing_officer_id", "revoId");
+        let ao = getVal("acceptingOfficerId", "accepting_officer_id", "aoId");
+
+        // RATER CASCADE LOGIC (for the dirty row):
+        if (!revo) revo = ro;
+        if (!ao) ao = revo;
+
+        if (ro || revo || ao) {
+          const r = await client.query(
+            `
+            UPDATE appraisal_cycle_participants
+            SET
+              reporting_officer_id = $3,
+              reviewing_officer_id = $4,
+              accepting_officer_id = $5,
+              updated_at = NOW()
+            WHERE (id = $1 OR employee_id = $6) AND cycle_id = $2
+            `,
+            [partId, cycleId, ro, revo, ao, empId]
+          );
+          
+          if (r.rowCount === 0) {
+            console.log(`[DEBUG] No row found for partId: ${partId}, empId: ${empId} in cycle ${cycleId}`);
+          }
         }
       }
+
+      // GLOBAL CASCADE SWEEP:
+      // Enforce the cascading rule for EVERY row in this cycle to ensure no gaps remain.
+      const res1 = await client.query(`
+        UPDATE appraisal_cycle_participants
+        SET reviewing_officer_id = reporting_officer_id, updated_at = NOW()
+        WHERE cycle_id = $1 AND reviewing_officer_id IS NULL AND reporting_officer_id IS NOT NULL
+      `, [cycleId]);
+      console.log(`[DEBUG] Global Sweep (RO->RevO): Updated ${res1.rowCount} rows`);
+
+      const res2 = await client.query(`
+        UPDATE appraisal_cycle_participants
+        SET accepting_officer_id = reviewing_officer_id, updated_at = NOW()
+        WHERE cycle_id = $1 AND accepting_officer_id IS NULL AND reviewing_officer_id IS NOT NULL
+      `, [cycleId]);
+      console.log(`[DEBUG] Global Sweep (RevO->AO): Updated ${res2.rowCount} rows`);
+
+      // GLOBAL APPRAISAL SYNC:
+      // Force all active appraisals to match the finalized participant mapping for this cycle.
+      const res3 = await client.query(`
+        UPDATE appraisals a
+        SET 
+          ro_id = p.reporting_officer_id,
+          revo_id = p.reviewing_officer_id,
+          ao_id = p.accepting_officer_id
+        FROM appraisal_cycle_participants p
+        WHERE a.cycle_id = $1 
+          AND a.employee_id = p.employee_id 
+          AND a.cycle_id = p.cycle_id
+      `, [cycleId]);
+      console.log(`[DEBUG] Global Sync: Updated ${res3.rowCount} active appraisal records`);
+
       await client.query("COMMIT");
+
+      await writeAudit({
+        user: req.user,
+        action: "PARTICIPANTS_UPDATED",
+        entity: "appraisal_cycle",
+        entityId: cycleId
+      });
+
+      return res.json({ 
+        message: "Assignments saved successfully",
+        stats: {
+          manualEdits: participants.length,
+          cascadedRevO: res1.rowCount,
+          cascadedAO: res2.rowCount,
+          appraisalsSynced: res3.rowCount
+        }
+      });
     } catch (e) {
       await client.query("ROLLBACK");
+      console.error("[ERROR] bulkSaveParticipants failed:", e.message);
       throw e;
     } finally {
       client.release();
     }
-
-    await writeAudit({
-      user: req.user,
-      action: "PARTICIPANTS_UPDATED",
-      entity: "appraisal_cycle",
-      entityId: cycleId
-    });
-
-    return res.json({ message: "Assignments saved successfully" });
   } catch (error) {
     return next(error);
   }

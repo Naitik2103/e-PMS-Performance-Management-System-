@@ -1,0 +1,10 @@
+    const getVal = (...keys) => {
+          for (const k of keys) {
+            if (p[k] !== undefined && p[k] !== null) {
+              const s = String(p[k]).trim();
+              const sl = s.toLowerCase();
+              if (s !== "" && sl !== "null" && sl !== "undefined" && sl !== "none") return s;
+            }
+          }
+          return null;
+        };

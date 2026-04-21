@@ -152,8 +152,8 @@ export function getValidRevOOptions(employeeId, selectedROId, allUsers, allParti
 
   const options = (allUsers || [])
     .filter((u) => String(u.id) !== String(employeeId))
-    .filter((u) => String(u.id) !== String(roId))
-    .filter((u) => asLevel(u.org_level) > roLevel)
+    // Rule relaxed: RevO CAN be the same OR higher level than RO to allow for cascading.
+    .filter((u) => asLevel(u.org_level) >= roLevel)
     .filter((u) => !wouldCreateCycle(String(u.id), String(employeeId), graph));
 
   const roParticipant = (allParticipants || []).find((p) => String(p?.employee_id) === String(roId));
@@ -188,9 +188,8 @@ export function getValidAOOptions(employeeId, selectedROId, selectedRevOId, allU
 
   const options = (allUsers || [])
     .filter((u) => String(u.id) !== String(employeeId))
-    .filter((u) => String(u.id) !== String(roId))
-    .filter((u) => String(u.id) !== String(revoId))
-    .filter((u) => asLevel(u.org_level) > revoLevel)
+    // Rule relaxed: AO CAN be the same OR higher level than RevO to allow for cascading.
+    .filter((u) => asLevel(u.org_level) >= revoLevel)
     .filter((u) => !wouldCreateCycle(String(u.id), String(employeeId), graph));
 
   const roParticipant = (allParticipants || []).find((p) => String(p?.employee_id) === String(roId));
@@ -212,7 +211,7 @@ export function getValidAOOptions(employeeId, selectedROId, selectedRevOId, allU
  * Basic hard-rule validation for one row (frontend-side).
  * Hard rules:
  * - no self assignment
- * - no duplicates
+ * - no duplicates (REMOVED)
  * - no cycles for any evaluator assignment
  *
  * @returns {{ ok: boolean, errors: string[] }}
@@ -226,9 +225,7 @@ export function validateAssignmentsHard(employeeId, assignments, allParticipants
   /** @type {string[]} */
   const errors = [];
 
-  const dupCheck = [ro, revo, ao].filter(Boolean);
-  const uniq = new Set(dupCheck);
-  if (dupCheck.length !== uniq.size) errors.push("RO, RevO, and AO must all be different.");
+  // Rule removed: RO, RevO, and AO CAN be the same person now to allow for cascading.
 
   if (ro && ro === eid) errors.push("RO cannot be the employee themselves.");
   if (revo && revo === eid) errors.push("RevO cannot be the employee themselves.");
@@ -340,4 +337,3 @@ export function onSelectionChange(
     hardErrors: hard.errors
   };
 }
-

@@ -156,23 +156,32 @@ const ManageParticipantsPage = () => {
 
   const saveAllMutation = useMutation({
     mutationFn: async () => {
-      for (const p of dirtyParticipants) {
-        const employeeId = String(p.employee_id);
-        await apiClient.put(`/appraisal-cycles/${cycleId}/participants/${employeeId}`, {
-          ro_id: p.ro_id || null,
-          revo_id: p.revo_id || null,
-          ao_id: p.ao_id || null
-        });
-      }
+      // Logic changed: Instead of individual row loops, we now send all changes in one high-performance batch.
+      // This allows the backend to run a 'Global Cascade' sweep for the entire cycle.
+      const payload = dirtyParticipants.map((p) => ({
+        employeeId: p.employee_id,
+        roId: p.ro_id,
+        revoId: p.revo_id,
+        aoId: p.ao_id
+      }));
+
+      await apiClient.put(`/admin/cycles/${cycleId}/participants`, { participants: payload });
     },
-    onSuccess: (data) => {
-      if (dirtyParticipants.length > 0) {
-        showToast(`Saved ${dirtyParticipants.length} changed row(s)`, "success");
-      } else {
-        showToast("No changes to save");
+    onSuccess: (res) => {
+      const stats = res?.data?.stats;
+      let msg = "Assignments saved successfully";
+      
+      if (stats && (stats.cascadedRevO > 0 || stats.cascadedAO > 0)) {
+        msg += `. Cascaded ${stats.cascadedRevO + stats.cascadedAO} rater gaps across the cycle.`;
+      } else if (dirtyParticipants.length > 0) {
+        msg = `Saved ${dirtyParticipants.length} changed row(s)`;
       }
+
+      showToast(msg, "success");
       setServerErrors([]);
       queryClient.invalidateQueries({ queryKey: ["participantsHybrid", cycleId] });
+      // Force a hard refresh to ensure the UI catches the server-side cascading results immediately.
+      queryClient.refetchQueries({ queryKey: ["participantsHybrid", cycleId] });
     },
     onError: (err) => {
       const d = err.response?.data;

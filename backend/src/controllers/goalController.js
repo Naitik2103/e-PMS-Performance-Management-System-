@@ -831,9 +831,18 @@ const submitGoalsByAppraisalId = async (req, res, next) => {
     if (Math.round(totalWeight * 100) / 100 !== 100) {
       return res.status(400).json({ error: "Validation error", details: ["Total goal weightage must equal 100"] });
     }
-    await pool.query("UPDATE goals SET status = 'submitted', updated_at = NOW() WHERE appraisal_id = $1", [appraisalId]);
-    await pool.query("UPDATE appraisals SET status = 'submitted', goals_submitted_at = NOW() WHERE id = $1", [appraisalId]);
-    return res.json({ message: "Goals submitted" });
+
+    const isCEO = !review.ro_id;
+    const nextStatus = isCEO ? "approved" : "submitted";
+    const approvedAt = isCEO ? "NOW()" : "NULL";
+
+    await pool.query("UPDATE goals SET status = $1, updated_at = NOW() WHERE appraisal_id = $2", [nextStatus, appraisalId]);
+    await pool.query(
+      `UPDATE appraisals SET status = $1, goals_submitted_at = NOW(), goals_approved_at = ${approvedAt} WHERE id = $2`,
+      [nextStatus, appraisalId]
+    );
+
+    return res.json({ message: isCEO ? "Goals submitted and auto-approved" : "Goals submitted" });
   } catch (error) {
     return next(error);
   }
