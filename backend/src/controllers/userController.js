@@ -25,6 +25,11 @@ const createUser = async (req, res, next) => {
   try {
     const { firstName, lastName, email, phone, password, role, department, reportingTo, reviewingOfficerId, acceptingOfficerId } = req.body;
     const emailValue = (email || "").toLowerCase();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(emailValue)) {
+      res.status(400);
+      return next(new Error("Invalid email format"));
+    }
     const phoneValue = phone ? String(phone).trim() : null;
 
     const exists = await pool.query("SELECT 1 FROM users WHERE LOWER(email) = $1 LIMIT 1", [emailValue]);

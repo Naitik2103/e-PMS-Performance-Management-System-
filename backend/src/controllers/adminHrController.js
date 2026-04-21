@@ -116,6 +116,11 @@ const createHrUser = async (req, res, next) => {
     }
 
     const hashedPassword = await bcrypt.hash(String(temporaryPassword), 10);
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(emailValue)) {
+      res.status(400);
+      return next(new Error("Invalid email format"));
+    }
     const normalizedRole = normalizeRole(role);
 
     const phoneVal = phone ? String(phone).trim() : null;
