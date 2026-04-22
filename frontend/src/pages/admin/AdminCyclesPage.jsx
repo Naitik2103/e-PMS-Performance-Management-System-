@@ -182,47 +182,64 @@ const AdminCyclesPage = () => {
           return (
             <div
               key={c.id}
-              className={`card admin-cycle-card${isActiveCard ? " admin-cycle-card--active" : ""}`}
-              style={isActiveCard ? { border: "1.5px solid #1D9E75" } : undefined}
+              className={`card admin-cycle-card-new${isActiveCard ? " active" : ""}`}
             >
-              <div className="admin-cycle-card-head">
-                <div>
-                  <div className="admin-cycle-title">{c.cycleName || c.name}</div>
-                  <div className="muted small">{dateSummary}</div>
-                </div>
-                <span className={statusBadgeClass(c.status)}>{c.status || "draft"}</span>
-              </div>
-              <div className="admin-cycle-stats">
-                <span title="Total">{stats.total} total</span>
-                <span className="stat-ok">{stats.fullyAssigned} full</span>
-                <span className="stat-warn">{stats.partial} partial</span>
-                <span className="stat-bad">{stats.notAssigned} none</span>
-              </div>
-              <div className="admin-cycle-progress-wrap">
-                <div className="admin-cycle-progress" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="admin-cycle-actions">
-                <Link className="btn ghost" to={`/admin/cycles/${c.id}/participants`}>
-                  Manage participants →
-                </Link>
-                <button type="button" className="btn ghost" onClick={() => openEditModal(c)}>
-                  Edit dates
-                </button>
-                {c.status === "draft" && (
-                  <span
-                    className="admin-activate-wrap"
-                    title={hasOtherActive(c.id) ? "Another cycle is already active" : ""}
-                  >
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      disabled={hasOtherActive(c.id) || activateMutation.isPending}
-                      onClick={() => activateMutation.mutate(c.id)}
-                    >
-                      Activate
-                    </button>
+              <div className="admin-cycle-card-body">
+                <div className="admin-cycle-card-top">
+                  <div className="admin-cycle-info">
+                    <h3 className="admin-cycle-name">{c.cycleName || c.name}</h3>
+                    <div className="admin-cycle-dates">{dateSummary}</div>
+                  </div>
+                  <span className={`admin-cycle-status ${c.status || "draft"}`}>
+                    {(c.status || "draft").charAt(0).toUpperCase() + (c.status || "draft").slice(1)}
                   </span>
-                )}
+                </div>
+
+                <div className="admin-cycle-stats-grid">
+                  <div className="admin-cycle-stat-item">
+                    <div className="stat-value total">{stats.total}</div>
+                    <div className="stat-label">total</div>
+                  </div>
+                  <div className="admin-cycle-stat-item">
+                    <div className="stat-value full">{stats.fullyAssigned}</div>
+                    <div className="stat-label">full</div>
+                  </div>
+                  <div className="admin-cycle-stat-item">
+                    <div className="stat-value partial">{stats.partial}</div>
+                    <div className="stat-label">partial</div>
+                  </div>
+                  <div className="admin-cycle-stat-item">
+                    <div className="stat-value none">{stats.notAssigned}</div>
+                    <div className="stat-label">none</div>
+                  </div>
+                </div>
+
+                <div className="admin-cycle-progress-bar">
+                  <div className="progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+
+                <div className="admin-cycle-footer-actions">
+                  <Link className="admin-btn-outline" to={`/admin/cycles/${c.id}/participants`}>
+                    Manage participants →
+                  </Link>
+                  <button type="button" className="admin-btn-outline" onClick={() => openEditModal(c)}>
+                    Edit dates
+                  </button>
+                  {c.status === "draft" && (
+                    <span
+                      title={hasOtherActive(c.id) ? "Another cycle is already active" : ""}
+                    >
+                      <button
+                        type="button"
+                        className="admin-btn-outline primary"
+                        disabled={hasOtherActive(c.id) || activateMutation.isPending}
+                        onClick={() => activateMutation.mutate(c.id)}
+                      >
+                        Activate
+                      </button>
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );
