@@ -208,41 +208,77 @@ const Tracking = () => {
             </tr>
           </thead>
           <tbody>
-            {tracking.length === 0 && <tr><td colSpan={isSixMonthPeriodClosed ? 5 : 6} className="table-empty">No tracking records found.</td></tr>}
-            {tracking.map((record) => (
-              <tr key={record.id}>
-                <td>{record.employee?.name || "Self"}</td>
-                <td>{record.goalTitle || "N/A"}</td>
-                <td>
-                  <span style={{
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                    fontSize: "12px",
-                    fontWeight: "600",
-                    backgroundColor: record.status === "submitted" ? "#d4edda" : "#fff3cd",
-                    color: record.status === "submitted" ? "#155724" : "#856404"
-                  }}>
-                    {record.status === "submitted" ? "Submitted" : "Draft"}
-                  </span>
+            {tracking.length === 0 && (
+              <tr>
+                <td colSpan={isSixMonthPeriodClosed ? 5 : 6} className="table-empty">
+                  No tracking records found.
                 </td>
-                <td>{record.progressText}</td>
-                <td>{record.roRemarks || record.reportingRemarks || <span className="muted">-</span>}</td>
-                {!isSixMonthPeriodClosed && (
-                  <td>
-                    {user?.role === ROLES.REPORTING_OFFICER && record.status === "submitted" && (
-                      <div className="inline-form-short">
-                        <input
-                          placeholder="Add remarks..."
-                          value={remarks[record.id] || ""}
-                          onChange={(e) => setRemarks((prev) => ({ ...prev, [record.id]: e.target.value }))}
-                        />
-                        <button className="btn" type="button" onClick={() => submitRemarks(record.id)}>Submit</button>
-                      </div>
-                    )}
-                  </td>
-                )}
               </tr>
-            ))}
+            )}
+            {(() => {
+              const groups = {};
+              tracking.forEach((record) => {
+                const dept = record.employee?.department || "Main Department";
+                if (!groups[dept]) groups[dept] = [];
+                groups[dept].push(record);
+              });
+              
+              const sortedDepts = Object.keys(groups).sort();
+              
+              return sortedDepts.map((dept) => (
+                <React.Fragment key={dept}>
+                  {tracking.length > 0 && user?.role !== ROLES.EMPLOYEE && (
+                    <tr>
+                      <td colSpan={isSixMonthPeriodClosed ? 5 : 6} style={{ 
+                        background: "#f1f5f9", 
+                        padding: "10px 16px", 
+                        fontWeight: "700", 
+                        color: "#475569", 
+                        fontSize: "13px", 
+                        textTransform: "uppercase", 
+                        letterSpacing: "0.025em" 
+                      }}>
+                        🏢 {dept}
+                      </td>
+                    </tr>
+                  )}
+                  {groups[dept].map((record) => (
+                    <tr key={record.id}>
+                      <td>{record.employee?.name || "Self"}</td>
+                      <td>{record.goalTitle || "N/A"}</td>
+                      <td>
+                        <span style={{
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                          backgroundColor: record.status === "submitted" ? "#d4edda" : "#fff3cd",
+                          color: record.status === "submitted" ? "#155724" : "#856404"
+                        }}>
+                          {record.status === "submitted" ? "Submitted" : "Draft"}
+                        </span>
+                      </td>
+                      <td>{record.progressText}</td>
+                      <td>{record.roRemarks || record.reportingRemarks || <span className="muted">-</span>}</td>
+                      {!isSixMonthPeriodClosed && (
+                        <td>
+                          {user?.role === ROLES.REPORTING_OFFICER && record.status === "submitted" && (
+                            <div className="inline-form-short">
+                              <input
+                                placeholder="Add remarks..."
+                                value={remarks[record.id] || ""}
+                                onChange={(e) => setRemarks((prev) => ({ ...prev, [record.id]: e.target.value }))}
+                              />
+                              <button className="btn" type="button" onClick={() => submitRemarks(record.id)}>Submit</button>
+                            </div>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ));
+            })()}
           </tbody>
         </table>
       </div>

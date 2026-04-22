@@ -125,27 +125,36 @@ const Goals = () => {
     isGoalPeriodActive &&
     (goals.length === 0 || hasUnsubmittedGoals || !isWeightageComplete);
 
-  const groupedGoals = useMemo(() => {
-    const groups = [];
-    const groupsByEmployee = new Map();
+  const groupedByDept = useMemo(() => {
+    const depts = new Map();
 
     goals.forEach((goal) => {
+      const deptName = goal.employee?.department || "Main Department";
       const employeeId = goal.employee?.id ?? `self-${goal.cycleId || "unknown"}`;
 
-      if (!groupsByEmployee.has(employeeId)) {
-        const group = {
-          employeeId,
-          employeeName: goal.employee?.name || "Self",
-          items: []
-        };
-        groupsByEmployee.set(employeeId, group);
-        groups.push(group);
+      if (!depts.has(deptName)) {
+        depts.set(deptName, { name: deptName, employees: new Map() });
       }
 
-      groupsByEmployee.get(employeeId).items.push(goal);
+      const deptGroup = depts.get(deptName);
+      if (!deptGroup.employees.has(employeeId)) {
+        deptGroup.employees.set(employeeId, {
+          id: employeeId,
+          name: goal.employee?.name || "Self",
+          items: []
+        });
+      }
+
+      deptGroup.employees.get(employeeId).items.push(goal);
     });
 
-    return groups;
+    // Convert Map to sorted array for rendering
+    return Array.from(depts.values())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(dept => ({
+        ...dept,
+        employees: Array.from(dept.employees.values())
+      }));
   }, [goals]);
 
   const handleSave = async () => {
@@ -304,75 +313,92 @@ const Goals = () => {
               <tr><td colSpan={showGroupedByEmployee ? 5 : 6} className="table-empty">No goals found.</td></tr>
             )}
             {showGroupedByEmployee
-              ? groupedGoals.map((group) => (
-                <React.Fragment key={group.employeeId}>
+              ? groupedByDept.map((dept) => (
+                <React.Fragment key={dept.name}>
                   <tr>
-                    <td colSpan={5} style={{ fontWeight: 700, background: "#f8fafc", color: "#1f2937" }}>
-                      {group.employeeName}
+                    <td colSpan={5} style={{ 
+                      background: "#f1f5f9", 
+                      padding: "10px 16px", 
+                      fontWeight: "700", 
+                      color: "#475569", 
+                      fontSize: "13px", 
+                      textTransform: "uppercase", 
+                      letterSpacing: "0.025em" 
+                    }}>
+                      🏢 {dept.name}
                     </td>
                   </tr>
-                  {group.items.map((goal) => (
-                    <tr
-                      key={goal.id}
-                      ref={(node) => {
-                        if (node) {
-                          goalRowRefs.current.set(String(goal.id), node);
-                        } else {
-                          goalRowRefs.current.delete(String(goal.id));
-                        }
-                      }}
-                      className={String(focusedGoalId) === String(goal.id) ? "row-highlight" : ""}
-                    >
-                      <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
-                      <td>
-                        <div>{goal.goalTitle}</div>
-                        <div className="muted" style={{ fontSize: "12px", marginTop: 4 }}>
-                          KPI: {goal.goalDescription || "-"}
-                        </div>
-                        {goal.status === "returned" && goal.returnReason && (
-                          <div style={{ marginTop: "8px", padding: "8px", backgroundColor: "#fff4e5", borderLeft: "4px solid #ff9800", fontSize: "12px", color: "#663c00", borderRadius: "4px" }}>
-                            <strong style={{ display: "block", marginBottom: "4px" }}>Returned by {goal.returnRole === "reporting_officer" ? "Reporting Officer" : "Reviewing Officer"}:</strong>
-                            {goal.returnReason}
-                          </div>
-                        )}
-                      </td>
-                      <td>{Number(goal.weightage).toFixed(2)}</td>
-                      <td><StatusBadge status={goal.status} /></td>
-                      <td>
-                        {canTakeGoalAction && (
-                          <div className="table-actions" style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
-                            {activeRole === ROLES.REPORTING_OFFICER && goal.status === "submitted" && (
-                              returningGoalId === goal.id ? (
-                                <div style={{ display: "flex", gap: "8px", width: "100%", maxWidth: "300px" }}>
-                                  <input type="text" className="input" placeholder="Reason for return..." value={returnRemark} onChange={(e) => setReturnRemark(e.target.value)} style={{ flex: 1, padding: "6px" }} />
-                                  <button className="btn" type="button" style={{ padding: "6px 12px" }} onClick={() => handleApprove(goal.id, "ro", "return", returnRemark)}>Confirm</button>
-                                  <button className="btn ghost" type="button" style={{ padding: "6px 12px" }} onClick={() => { setReturningGoalId(null); setReturnRemark(""); }}>Cancel</button>
-                                </div>
-                              ) : (
-                                <div style={{ display: "flex", gap: "8px" }}>
-                                  <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
-                                  <button className="btn ghost" type="button" onClick={() => { setReturningGoalId(goal.id); setReturnRemark(""); }}>Return</button>
-                                </div>
-                              )
+                  {dept.employees.map((emp) => (
+                    <React.Fragment key={emp.id}>
+                      <tr>
+                        <td colSpan={5} style={{ fontWeight: 700, background: "#f8fafc", color: "#1f2937", paddingLeft: "32px" }}>
+                          👤 {emp.name}
+                        </td>
+                      </tr>
+                      {emp.items.map((goal) => (
+                        <tr
+                          key={goal.id}
+                          ref={(node) => {
+                            if (node) {
+                              goalRowRefs.current.set(String(goal.id), node);
+                            } else {
+                              goalRowRefs.current.delete(String(goal.id));
+                            }
+                          }}
+                          className={String(focusedGoalId) === String(goal.id) ? "row-highlight" : ""}
+                        >
+                          <td>{goal.cycle?.name || goal.cycle?.year || "-"}</td>
+                          <td>
+                            <div>{goal.goalTitle}</div>
+                            <div className="muted" style={{ fontSize: "12px", marginTop: 4 }}>
+                              KPI: {goal.goalDescription || "-"}
+                            </div>
+                            {goal.status === "returned" && goal.returnReason && (
+                              <div style={{ marginTop: "8px", padding: "8px", backgroundColor: "#fff4e5", borderLeft: "4px solid #ff9800", fontSize: "12px", color: "#663c00", borderRadius: "4px" }}>
+                                <strong style={{ display: "block", marginBottom: "4px" }}>Returned by {goal.returnRole === "reporting_officer" ? "Reporting Officer" : "Reviewing Officer"}:</strong>
+                                {goal.returnReason}
+                              </div>
                             )}
-                            {activeRole === ROLES.REVIEWING_OFFICER && goal.status === "ro_approved" && (
-                              returningGoalId === goal.id ? (
-                                <div style={{ display: "flex", gap: "8px", width: "100%", maxWidth: "300px" }}>
-                                  <input type="text" className="input" placeholder="Reason for return..." value={returnRemark} onChange={(e) => setReturnRemark(e.target.value)} style={{ flex: 1, padding: "6px" }} />
-                                  <button className="btn" type="button" style={{ padding: "6px 12px" }} onClick={() => handleApprove(goal.id, "review", "return", returnRemark)}>Confirm</button>
-                                  <button className="btn ghost" type="button" style={{ padding: "6px 12px" }} onClick={() => { setReturningGoalId(null); setReturnRemark(""); }}>Cancel</button>
-                                </div>
-                              ) : (
-                                <div style={{ display: "flex", gap: "8px" }}>
-                                  <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
-                                  <button className="btn ghost" type="button" onClick={() => { setReturningGoalId(goal.id); setReturnRemark(""); }}>Return</button>
-                                </div>
-                              )
+                          </td>
+                          <td>{Number(goal.weightage).toFixed(2)}</td>
+                          <td><StatusBadge status={goal.status} /></td>
+                          <td>
+                            {canTakeGoalAction && (
+                              <div className="table-actions" style={{ display: "flex", flexDirection: "column", gap: "8px", alignItems: "flex-end" }}>
+                                {activeRole === ROLES.REPORTING_OFFICER && goal.status === "submitted" && (
+                                  returningGoalId === goal.id ? (
+                                    <div style={{ display: "flex", gap: "8px", width: "100%", maxWidth: "300px" }}>
+                                      <input type="text" className="input" placeholder="Reason for return..." value={returnRemark} onChange={(e) => setReturnRemark(e.target.value)} style={{ flex: 1, padding: "6px" }} />
+                                      <button className="btn" type="button" style={{ padding: "6px 12px" }} onClick={() => handleApprove(goal.id, "ro", "return", returnRemark)}>Confirm</button>
+                                      <button className="btn ghost" type="button" style={{ padding: "6px 12px" }} onClick={() => { setReturningGoalId(null); setReturnRemark(""); }}>Cancel</button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                      <button className="btn" type="button" onClick={() => handleApprove(goal.id, "ro", "approve")}>Approve</button>
+                                      <button className="btn ghost" type="button" onClick={() => { setReturningGoalId(goal.id); setReturnRemark(""); }}>Return</button>
+                                    </div>
+                                  )
+                                )}
+                                {activeRole === ROLES.REVIEWING_OFFICER && goal.status === "ro_approved" && (
+                                  returningGoalId === goal.id ? (
+                                    <div style={{ display: "flex", gap: "8px", width: "100%", maxWidth: "300px" }}>
+                                      <input type="text" className="input" placeholder="Reason for return..." value={returnRemark} onChange={(e) => setReturnRemark(e.target.value)} style={{ flex: 1, padding: "6px" }} />
+                                      <button className="btn" type="button" style={{ padding: "6px 12px" }} onClick={() => handleApprove(goal.id, "review", "return", returnRemark)}>Confirm</button>
+                                      <button className="btn ghost" type="button" style={{ padding: "6px 12px" }} onClick={() => { setReturningGoalId(null); setReturnRemark(""); }}>Cancel</button>
+                                    </div>
+                                  ) : (
+                                    <div style={{ display: "flex", gap: "8px" }}>
+                                      <button className="btn" type="button" onClick={() => handleApprove(goal.id, "review", "approve")}>Approve</button>
+                                      <button className="btn ghost" type="button" onClick={() => { setReturningGoalId(goal.id); setReturnRemark(""); }}>Return</button>
+                                    </div>
+                                  )
+                                )}
+                              </div>
                             )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </React.Fragment>
               ))

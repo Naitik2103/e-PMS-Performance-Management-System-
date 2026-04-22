@@ -314,38 +314,71 @@ const Dashboard = () => {
             {assigned.employees.length === 0 ? (
               <div className="assignment-empty-message">No employees assigned.</div>
             ) : (
-              <div className="assignment-employee-list">
-                {assigned.employees.slice(0, 12).map((emp) => (
-                  <div
-                    key={emp.employeeId}
-                    className="assignment-employee-item"
-                    onClick={() => openEmployeeReview(emp)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        openEmployeeReview(emp);
-                      }
-                    }}
-                    role={canOpenEmployeeReviews ? "button" : undefined}
-                    tabIndex={canOpenEmployeeReviews ? 0 : undefined}
-                    style={canOpenEmployeeReviews ? { cursor: "pointer" } : undefined}
-                  >
-                    <div className="assignment-employee-avatar">{String(emp.employeeName || "?").trim().charAt(0).toUpperCase()}</div>
-                    <div className="assignment-employee-meta">
-                      <div className="assignment-employee-name">
-                        {emp.employeeName}
-                        {emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+              <div className="assignment-employee-list" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                {(() => {
+                  const groups = {};
+                  assigned.employees.forEach((emp) => {
+                    const dept = emp.department || "Main Department";
+                    if (!groups[dept]) groups[dept] = [];
+                    groups[dept].push(emp);
+                  });
+                  
+                  const sortedDepts = Object.keys(groups).sort();
+                  
+                  return sortedDepts.map((dept) => (
+                    <div key={dept} className="assignment-dept-group">
+                      <div style={{ 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "8px", 
+                        padding: "4px 8px", 
+                        marginBottom: "12px", 
+                        background: "#f1f5f9", 
+                        borderRadius: "6px", 
+                        color: "#475569", 
+                        fontSize: "11px", 
+                        fontWeight: "800", 
+                        textTransform: "uppercase", 
+                        letterSpacing: "0.05em" 
+                      }}>
+                        🏢 {dept}
                       </div>
-                      <div className="assignment-employee-details">
-                        {emp.department || "Department not set"}
-                        {emp.designation ? ` • ${emp.designation}` : ""}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+                        {groups[dept].map((emp) => (
+                          <div
+                            key={emp.employeeId}
+                            className="assignment-employee-item"
+                            onClick={() => openEmployeeReview(emp)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openEmployeeReview(emp);
+                              }
+                            }}
+                            role={canOpenEmployeeReviews ? "button" : undefined}
+                            tabIndex={canOpenEmployeeReviews ? 0 : undefined}
+                            style={{ 
+                              ...(canOpenEmployeeReviews ? { cursor: "pointer" } : {}),
+                              margin: 0,
+                              width: "100%"
+                            }}
+                          >
+                            <div className="assignment-employee-avatar">{String(emp.employeeName || "?").trim().charAt(0).toUpperCase()}</div>
+                            <div className="assignment-employee-meta">
+                              <div className="assignment-employee-name">
+                                {emp.employeeName}
+                                {emp.employeeCode ? ` (${emp.employeeCode})` : ""}
+                              </div>
+                              <div className="assignment-employee-details">
+                                {emp.designation || "Designation not set"}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                ))}
-                {assigned.employees.length > 12 && (
-                  <div className="assignment-more-note">+{assigned.employees.length - 12} more</div>
-                )}
+                  ));
+                })()}
               </div>
             )}
           </div>

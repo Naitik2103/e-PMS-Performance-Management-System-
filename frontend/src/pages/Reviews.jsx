@@ -979,31 +979,61 @@ const Reviews = () => {
           </thead>
           <tbody>
             {visibleReviews.length === 0 && <tr><td colSpan={5} className="table-empty">No reviews found.</td></tr>}
-            {visibleReviews.map((review) => (
-              <tr
-                key={review.id}
-                ref={(node) => {
-                  if (node) {
-                    reviewRowRefs.current.set(String(review.id), node);
-                  } else {
-                    reviewRowRefs.current.delete(String(review.id));
-                  }
-                }}
-                className={String(focusedReviewId) === String(review.id) ? "row-highlight" : ""}
-              >
-                <td>{review.employee?.name || "Self"}</td>
-                <td>{review.cycle?.name || review.cycle?.year || "-"}</td>
-                <td><StatusBadge status={review.status} /></td>
-                <td>{review.finalScore ? Number(review.finalScore).toFixed(2) : "-"}</td>
-                <td>
-                  {(activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER || activeRole === ROLES.ACCEPTING_OFFICER || (activeRole === ROLES.EMPLOYEE && ["ao_accepted", "completed"].includes(review.status))) && (
-                    <button className="btn" type="button" onClick={() => openReview(review)}>
-                      {selectedReview?.id === review.id ? "Review Open" : (activeRole === ROLES.EMPLOYEE ? "View Details" : "Open Review")}
-                    </button>
+            {(() => {
+              const groups = {};
+              visibleReviews.forEach((review) => {
+                const dept = review.employee?.department || "Main Department";
+                if (!groups[dept]) groups[dept] = [];
+                groups[dept].push(review);
+              });
+              
+              const sortedDepts = Object.keys(groups).sort();
+              
+              return sortedDepts.map((dept) => (
+                <React.Fragment key={dept}>
+                  {visibleReviews.length > 0 && activeRole !== ROLES.EMPLOYEE && (
+                    <tr>
+                      <td colSpan={5} style={{ 
+                        background: "#f1f5f9", 
+                        padding: "10px 16px", 
+                        fontWeight: "700", 
+                        color: "#475569", 
+                        fontSize: "13px", 
+                        textTransform: "uppercase", 
+                        letterSpacing: "0.025em" 
+                      }}>
+                        🏢 {dept}
+                      </td>
+                    </tr>
                   )}
-                </td>
-              </tr>
-            ))}
+                  {groups[dept].map((review) => (
+                    <tr
+                      key={review.id}
+                      ref={(node) => {
+                        if (node) {
+                          reviewRowRefs.current.set(String(review.id), node);
+                        } else {
+                          reviewRowRefs.current.delete(String(review.id));
+                        }
+                      }}
+                      className={String(focusedReviewId) === String(review.id) ? "row-highlight" : ""}
+                    >
+                      <td>{review.employee?.name || "Self"}</td>
+                      <td>{review.cycle?.name || review.cycle?.year || "-"}</td>
+                      <td><StatusBadge status={review.status} /></td>
+                      <td>{review.finalScore ? Number(review.finalScore).toFixed(2) : "-"}</td>
+                      <td>
+                        {(activeRole === ROLES.REPORTING_OFFICER || activeRole === ROLES.REVIEWING_OFFICER || activeRole === ROLES.ACCEPTING_OFFICER || (activeRole === ROLES.EMPLOYEE && ["ao_accepted", "completed"].includes(review.status))) && (
+                          <button className="btn" type="button" onClick={() => openReview(review)}>
+                            {selectedReview?.id === review.id ? "Review Open" : (activeRole === ROLES.EMPLOYEE ? "View Details" : "Open Review")}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ));
+            })()}
           </tbody>
         </table>
         {selectedEmployeeId && visibleReviews.length === 0 && (
