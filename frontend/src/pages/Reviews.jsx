@@ -510,7 +510,7 @@ const Reviews = () => {
           </div>
 
           {/* Advanced Performance Analytics Dashboard (v2) */}
-          {activeRole === ROLES.EMPLOYEE && appraisalScoreSummary && (
+          {activeRole === ROLES.EMPLOYEE && appraisalScoreSummary && ["ao_accepted", "completed"].includes((currentAppraisalStatus || "").toLowerCase()) && (
             <div style={{ margin: "20px", padding: "24px", background: "linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%)", borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.05)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "30px", marginBottom: "30px" }}>
                 <div style={{ flex: "1 1 300px" }}>
