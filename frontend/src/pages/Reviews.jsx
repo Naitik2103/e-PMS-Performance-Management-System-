@@ -39,6 +39,14 @@ const Reviews = () => {
   const autoOpenedEmployeeRef = useRef("");
   const activeCycleId = activeCycle?.cycleId || activeCycle?.id || "";
   const activeRole = user?.selectedRole || user?.role;
+  const [expandedCats, setExpandedCats] = useState({});
+
+  const toggleCat = (cat) => {
+    setExpandedCats((prev) => ({
+      ...prev,
+      [cat]: !prev[cat]
+    }));
+  };
 
   const currentReview = useMemo(() => {
     if (!Array.isArray(reviews) || reviews.length === 0) return null;
@@ -815,70 +823,94 @@ const Reviews = () => {
               <h2 style={{ marginBottom: "20px" }}>Quantitative Attributes</h2>
               {[...new Set(attributeMasters.map(a => a.category))].map(cat => {
                 const catAttrs = attributeMasters.filter(a => a.category === cat);
+                const isExpanded = !!expandedCats[cat];
                 
                 const calculateAverage = (category, role) => {
                   if (!appraisalScoreSummary) return "0.00";
-                  
-                  // Map category and role to DB column name
                   const rolePrefix = role === ROLES.REPORTING_OFFICER ? "ro" : 
                                      role === ROLES.REVIEWING_OFFICER ? "revo" : "ao";
-                  
-                  // Handle potential variations in category strings
                   let catKey = category.toLowerCase().replace(/ /g, "_");
-                  if (catKey === "personal_qualities") catKey = "personal"; // DB column is ro_personal_avg
-                  
+                  if (catKey === "personal_qualities") catKey = "personal";
                   const colName = `${rolePrefix}_${catKey}_avg`;
                   const val = appraisalScoreSummary[colName];
                   return val ? Number(val).toFixed(2) : "0.00";
                 };
 
                 return (
-                  <div key={cat} style={{ marginBottom: "24px" }}>
-                    <div style={{ backgroundColor: "#f8fafc", padding: "12px 16px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <h3 style={{ margin: 0, fontSize: "16px", color: "#334155" }}>{cat}</h3>
+                  <div key={cat} style={{ marginBottom: "16px", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden" }}>
+                    <div 
+                      onClick={() => toggleCat(cat)}
+                      style={{ 
+                        backgroundColor: "#f8fafc", 
+                        padding: "16px", 
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        transition: "background-color 0.2s"
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f1f5f9"}
+                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
+                    >
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: "16px", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }}>▼</span>
+                          {cat}
+                        </h3>
+                        {!isExpanded && (
+                          <div style={{ display: "flex", gap: "15px", fontSize: "12px", marginTop: "8px" }}>
+                            <span style={{ color: "#64748b" }}>RO: <strong style={{ color: "#2563eb" }}>{calculateAverage(cat, ROLES.REPORTING_OFFICER)}</strong></span>
+                            <span style={{ color: "#64748b" }}>RevO: <strong style={{ color: "#d97706" }}>{calculateAverage(cat, ROLES.REVIEWING_OFFICER)}</strong></span>
+                            <span style={{ color: "#64748b" }}>AO: <strong style={{ color: "#059669" }}>{calculateAverage(cat, ROLES.ACCEPTING_OFFICER)}</strong></span>
+                          </div>
+                        )}
                       </div>
-                      <div style={{ display: "flex", gap: "20px", fontSize: "13px" }}>
-                        <span style={{ color: "#64748b" }}>RO Avg: <strong style={{ color: "#2563eb" }}>{calculateAverage(cat, ROLES.REPORTING_OFFICER)}</strong></span>
-                        <span style={{ color: "#64748b" }}>Reviewing Avg: <strong style={{ color: "#d97706" }}>{calculateAverage(cat, ROLES.REVIEWING_OFFICER)}</strong></span>
-                        <span style={{ color: "#64748b" }}>Accepting Avg: <strong style={{ color: "#059669" }}>{calculateAverage(cat, ROLES.ACCEPTING_OFFICER)}</strong></span>
-                      </div>
+                      {isExpanded && (
+                        <div style={{ display: "flex", gap: "20px", fontSize: "13px" }}>
+                          <span style={{ color: "#64748b" }}>RO Avg: <strong style={{ color: "#2563eb" }}>{calculateAverage(cat, ROLES.REPORTING_OFFICER)}</strong></span>
+                          <span style={{ color: "#64748b" }}>Reviewing Avg: <strong style={{ color: "#d97706" }}>{calculateAverage(cat, ROLES.REVIEWING_OFFICER)}</strong></span>
+                          <span style={{ color: "#64748b" }}>Accepting Avg: <strong style={{ color: "#059669" }}>{calculateAverage(cat, ROLES.ACCEPTING_OFFICER)}</strong></span>
+                        </div>
+                      )}
                     </div>
-                    <div className="table-wrap" style={{ marginTop: "12px" }}>
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th style={{ width: "30%" }}>Attribute</th>
-                            <th>RO Rating</th>
-                            <th>Reviewing Rating</th>
-                            <th>Accepting Rating</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {catAttrs.map(attr => {
-                            const getRating = (roleKey) => {
-                              const found = appraisalAttributeRatings.find(r => 
-                                String(r.attributeId) === String(attr.id) && 
-                                String(r.ratedByRole) === String(roleKey)
-                              );
-                              return found ? found.rating : "-";
-                            };
+                    
+                    {isExpanded && (
+                      <div className="table-wrap" style={{ padding: "0 16px 16px 16px", borderTop: "1px solid #e2e8f0" }}>
+                        <table className="table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: "30%" }}>Attribute</th>
+                              <th>RO Rating</th>
+                              <th>Reviewing Rating</th>
+                              <th>Accepting Rating</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {catAttrs.map(attr => {
+                              const getRating = (roleKey) => {
+                                const found = appraisalAttributeRatings.find(r => 
+                                  String(r.attributeId) === String(attr.id) && 
+                                  String(r.ratedByRole) === String(roleKey)
+                                );
+                                return found ? found.rating : "-";
+                              };
 
-                            return (
-                              <tr key={attr.id}>
-                                <td>
-                                  <div style={{ fontWeight: 600 }}>{attr.attributeName}</div>
-                                  <div className="muted small" style={{ marginTop: "4px" }}>{attr.description}</div>
-                                </td>
-                                <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.REPORTING_OFFICER)}</td>
-                                <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.REVIEWING_OFFICER)}</td>
-                                <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.ACCEPTING_OFFICER)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                              return (
+                                <tr key={attr.id}>
+                                  <td>
+                                    <div style={{ fontWeight: 600 }}>{attr.attributeName}</div>
+                                    <div className="muted small" style={{ marginTop: "4px" }}>{attr.description}</div>
+                                  </td>
+                                  <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.REPORTING_OFFICER)}</td>
+                                  <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.REVIEWING_OFFICER)}</td>
+                                  <td style={{ textAlign: "center", fontWeight: 500 }}>{getRating(ROLES.ACCEPTING_OFFICER)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1160,9 +1192,10 @@ const Reviews = () => {
                   ["ao_accepted", "completed"].includes((selectedReview?.status || "").toLowerCase())
                 ) && (
                   <div style={{ marginTop: "30px" }}>
-                    <h3>Quantitative Attributes</h3>
+                    <h3 style={{ marginBottom: "16px" }}>Quantitative Attributes</h3>
                     {[...new Set(attributeMasters.map(a => a.category))].map(cat => {
                       const catAttrs = attributeMasters.filter(a => a.category === cat);
+                      const isExpanded = !!expandedCats[cat];
                       
                       const calculateLiveAverage = (category) => {
                         let sum = 0;
@@ -1175,85 +1208,106 @@ const Reviews = () => {
                       };
 
                       return (
-                        <div key={cat} style={{ marginBottom: "20px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f5f5f5", padding: "10px", borderRadius: "4px" }}>
-                            <h4 style={{ margin: 0 }}>{cat}</h4>
-                            <strong style={{ color: "#1976d2" }}>Section Average: {calculateLiveAverage(cat)}</strong>
+                        <div key={cat} style={{ marginBottom: "16px", border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden" }}>
+                          <div 
+                            onClick={() => toggleCat(cat)}
+                            style={{ 
+                              display: "flex", 
+                              justifyContent: "space-between", 
+                              alignItems: "center", 
+                              backgroundColor: "#f8fafc", 
+                              padding: "12px 16px", 
+                              cursor: "pointer",
+                              transition: "background-color 0.2s"
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#f1f5f9"}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
+                          >
+                            <h4 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px", fontSize: "15px", color: "#334155" }}>
+                              <span style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s", fontSize: "12px" }}>▼</span>
+                              {cat}
+                            </h4>
+                            <strong style={{ color: "#1976d2", fontSize: "13px" }}>Section Average: {calculateLiveAverage(cat)}</strong>
                           </div>
-                          <table className="table" style={{ marginTop: "10px" }}>
-                            <thead>
-                              <tr>
-                                <th style={{ width: "25%" }}>Attribute</th>
-                                <th style={{ width: "40%" }}>Description</th>
-                                <th>RO Rating</th>
-                                <th>Reviewing Rating</th>
-                                <th>Accepting Rating</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {catAttrs.map(attr => {
-                                const current = selectedReviewAttributeInputs[attr.id] || {};
-                                const canEdit = Boolean(selectedReviewStage && selectedReview?.canEdit);
-                                const isRo = selectedReviewStage?.ratingKey === "roRating";
-                                const isRevo = selectedReviewStage?.ratingKey === "revoRating";
-                                const isAo = selectedReviewStage?.ratingKey === "aoRating";
 
-                                const getRoleRating = (roleKey) => {
-                                  const existing = (selectedReview.attributeRatings || []).find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === String(roleKey));
-                                  return existing ? existing.rating : "-";
-                                };
-
-                                return (
-                                  <tr key={attr.id}>
-                                    <td><strong>{attr.attributeName}</strong></td>
-                                    <td style={{ fontSize: "13px", color: "#666" }}>{attr.description}</td>
-                                    <td>
-                                      {canEdit && isRo ? (
-                                        <select
-                                          value={current.rating}
-                                          onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
-                                            ...prev,
-                                            [attr.id]: { ...prev[attr.id], rating: e.target.value }
-                                          }))}
-                                        >
-                                          <option value="">Select</option>
-                                          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
-                                        </select>
-                                      ) : getRoleRating(ROLES.REPORTING_OFFICER)}
-                                    </td>
-                                    <td>
-                                      {canEdit && isRevo ? (
-                                        <select
-                                          value={current.rating}
-                                          onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
-                                            ...prev,
-                                            [attr.id]: { ...prev[attr.id], rating: e.target.value }
-                                          }))}
-                                        >
-                                          <option value="">Select</option>
-                                          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
-                                        </select>
-                                      ) : getRoleRating(ROLES.REVIEWING_OFFICER)}
-                                    </td>
-                                    <td>
-                                      {canEdit && isAo ? (
-                                        <select
-                                          value={current.rating}
-                                          onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
-                                            ...prev,
-                                            [attr.id]: { ...prev[attr.id], rating: e.target.value }
-                                          }))}
-                                        >
-                                          <option value="">Select</option>
-                                          {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
-                                        </select>
-                                      ) : getRoleRating(ROLES.ACCEPTING_OFFICER)}
-                                    </td>
+                          {isExpanded && (
+                            <div style={{ padding: "0 16px 16px 16px", borderTop: "1px solid #e2e8f0" }}>
+                              <table className="table" style={{ marginTop: "10px" }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ width: "25%" }}>Attribute</th>
+                                    <th style={{ width: "40%" }}>Description</th>
+                                    <th>RO Rating</th>
+                                    <th>Reviewing Rating</th>
+                                    <th>Accepting Rating</th>
                                   </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                </thead>
+                                <tbody>
+                                  {catAttrs.map(attr => {
+                                    const current = selectedReviewAttributeInputs[attr.id] || {};
+                                    const canEdit = Boolean(selectedReviewStage && selectedReview?.canEdit);
+                                    const isRo = selectedReviewStage?.ratingKey === "roRating";
+                                    const isRevo = selectedReviewStage?.ratingKey === "revoRating";
+                                    const isAo = selectedReviewStage?.ratingKey === "aoRating";
+
+                                    const getRoleRating = (roleKey) => {
+                                      const existing = (selectedReview.attributeRatings || []).find(r => String(r.attributeId) === String(attr.id) && String(r.ratedByRole) === String(roleKey));
+                                      return existing ? existing.rating : "-";
+                                    };
+
+                                    return (
+                                      <tr key={attr.id}>
+                                        <td><strong>{attr.attributeName}</strong></td>
+                                        <td style={{ fontSize: "13px", color: "#666" }}>{attr.description}</td>
+                                        <td>
+                                          {canEdit && isRo ? (
+                                            <select
+                                              value={current.rating}
+                                              onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
+                                                ...prev,
+                                                [attr.id]: { ...prev[attr.id], rating: e.target.value }
+                                              }))}
+                                            >
+                                              <option value="">Select</option>
+                                              {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                          ) : getRoleRating(ROLES.REPORTING_OFFICER)}
+                                        </td>
+                                        <td>
+                                          {canEdit && isRevo ? (
+                                            <select
+                                              value={current.rating}
+                                              onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
+                                                ...prev,
+                                                [attr.id]: { ...prev[attr.id], rating: e.target.value }
+                                              }))}
+                                            >
+                                              <option value="">Select</option>
+                                              {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                          ) : getRoleRating(ROLES.REVIEWING_OFFICER)}
+                                        </td>
+                                        <td>
+                                          {canEdit && isAo ? (
+                                            <select
+                                              value={current.rating}
+                                              onChange={(e) => setSelectedReviewAttributeInputs(prev => ({
+                                                ...prev,
+                                                [attr.id]: { ...prev[attr.id], rating: e.target.value }
+                                              }))}
+                                            >
+                                              <option value="">Select</option>
+                                              {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v}</option>)}
+                                            </select>
+                                          ) : getRoleRating(ROLES.ACCEPTING_OFFICER)}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
