@@ -724,81 +724,111 @@ const Reviews = () => {
             )}
 
             {appraisalGoals.map((goal, index) => (
-              <div className="annual-rating-item" role="listitem" key={`${currentAppraisalId || "goal"}-${goal.id}`}>
-                <div className="annual-rating-main">
-                  <div className="annual-rating-goal-line">
-                    <span className="annual-rating-index">Goal {index + 1}</span>
-                    <h3 className="annual-rating-goal-title">{goal.goalTitle}</h3>
-                  </div>
-                  <div className="annual-rating-ref-block">
-                    <div className="annual-rating-ref-title">Original Goal (set in goal-setting period)</div>
-                    <p className="annual-rating-goal-kpi">{goal.goalDescription || "No KPI description provided."}</p>
-                  </div>
-
-                  <div className="annual-rating-ref-block">
-                    <div className="annual-rating-ref-title">Six-Month Progress (read-only reference)</div>
-                    <p className="annual-rating-progress-note">{goal.sixMonthProgressText || "No six-month progress note submitted."}</p>
-                  </div>
-
-                  <div className="annual-rating-ref-block">
-                    <label className="annual-rating-ref-title" htmlFor={`goal-achievement-${goal.id}`}>
-                      Final Achievement
-                    </label>
-                    <textarea
-                      id={`goal-achievement-${goal.id}`}
-                      rows={3}
-                      className="annual-rating-achievement"
-                      value={achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? ""}
-                      disabled={isSelfAppraisalLocked || !isAnnualPeriodActive}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: value }));
-                      }}
-                      onBlur={(e) => {
-                        if (isSelfAppraisalLocked) return;
-                        updateGoalRating(goal.id, { achievementText: e.target.value }).catch(() => {});
-                      }}
-                      placeholder="Example: Both papers now published. Paper 1 accepted in November, Paper 2 accepted in January."
-                    />
-                  </div>
-                  {goal.roRating && (
-                    <>
-                      <div className="annual-rating-ref-block">
-                        <div className="annual-rating-ref-title">RO Rating</div>
-                        <p className="annual-rating-progress-note">{goal.roRating} / 5</p>
-                      </div>
-                      <div className="annual-rating-ref-block">
-                        <div className="annual-rating-ref-title">RO Remarks</div>
-                        <p className="annual-rating-progress-note">{goal.roRemarks || "No remarks provided."}</p>
-                      </div>
-                    </>
-                  )}
-                  {goal.revoRating && (
-                    <>
-                      <div className="annual-rating-ref-block">
-                        <div className="annual-rating-ref-title">Reviewing Officer Rating</div>
-                        <p className="annual-rating-progress-note">{goal.revoRating} / 5</p>
-                      </div>
-                      <div className="annual-rating-ref-block">
-                        <div className="annual-rating-ref-title">Reviewing Officer Remarks</div>
-                        <p className="annual-rating-progress-note">{goal.revoRemarks || "No remarks provided."}</p>
-                      </div>
-                    </>
-                  )}
-                  {goal.aoRating && (
-                    <>
-                      <div className="annual-rating-ref-block">
-                        <div className="annual-rating-ref-title">Accepting Officer Rating</div>
-                        <p className="annual-rating-progress-note">{goal.aoRating} / 5</p>
-                      </div>
-                      <div className="annual-rating-ref-block">
-                        <div className="annual-rating-ref-title">Accepting Officer Remarks</div>
-                        <p className="annual-rating-progress-note">{goal.aoRemarks || "No remarks provided."}</p>
-                      </div>
-                    </>
-                  )}
+              <div key={`${currentAppraisalId || "goal"}-${goal.id}`} className="result-card">
+                {/* 1. Card Header */}
+                <div className="result-card-header">
+                  <div className="result-card-index">GOAL {index + 1}</div>
+                  <h3 className="result-card-title">{goal.goalTitle}</h3>
                 </div>
 
+                <div className="result-card-content">
+                  {/* 2. Definition & Mid-Year Reference Section */}
+                  <div className="result-card-grid">
+                    <div className="result-ref-block">
+                      <div className="result-ref-title">Target Goal & KPI</div>
+                      <div className="result-ref-body">{goal.goalDescription || "No KPI description provided."}</div>
+                    </div>
+                    <div className="result-ref-block">
+                      <div className="result-ref-title">Mid-Year Progress Reference</div>
+                      <div className="result-ref-body">{goal.sixMonthProgressText || "No six-month progress note submitted."}</div>
+                    </div>
+                  </div>
+
+                  {/* 3. Final Achievement Highlight */}
+                  <div className="achievement-highlight-box">
+                    <div className="result-ref-title" style={{ marginBottom: "12px", textAlign: "center" }}>Final Employee Achievement</div>
+                    {!isSelfAppraisalLocked && isAnnualPeriodActive ? (
+                      <textarea
+                        className="achievement-textarea"
+                        rows={4}
+                        value={achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setAchievementInputs((prev) => ({ ...prev, [`${currentAppraisalId}-${goal.id}`]: value }));
+                        }}
+                        onBlur={(e) => {
+                          if (isSelfAppraisalLocked) return;
+                          updateGoalRating(goal.id, { achievementText: e.target.value }).catch(() => {});
+                        }}
+                        placeholder="Detail your final achievement here..."
+                      />
+                    ) : (
+                      <p className="achievement-text">
+                        {achievementInputs[`${currentAppraisalId}-${goal.id}`] ?? goal.achievementText ?? "No achievement details recorded."}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 4. Multi-Officer Feedback Matrix */}
+                  <div className="feedback-matrix">
+                    {/* Reporting Officer */}
+                    <div className="feedback-column">
+                      <div className="feedback-officer-head">
+                        <span className="officer-role-label">Reporting Officer</span>
+                      </div>
+                      <div className="feedback-body">
+                        <div className="feedback-rating-badge">
+                          {goal.roRating ? (
+                            <span className="rating-value">{goal.roRating} <small>/ 5</small></span>
+                          ) : (
+                            <span className="rating-pending">Not rated</span>
+                          )}
+                        </div>
+                        <div className="feedback-remarks">
+                          {goal.roRemarks || "No remarks provided."}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Reviewing Officer */}
+                    <div className="feedback-column">
+                      <div className="feedback-officer-head">
+                        <span className="officer-role-label">Reviewing Officer</span>
+                      </div>
+                      <div className="feedback-body">
+                        <div className="feedback-rating-badge">
+                          {goal.revoRating ? (
+                            <span className="rating-value">{goal.revoRating} <small>/ 5</small></span>
+                          ) : (
+                            <span className="rating-pending">Not rated</span>
+                          )}
+                        </div>
+                        <div className="feedback-remarks">
+                          {goal.revoRemarks || "No remarks provided."}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Accepting Officer */}
+                    <div className="feedback-column">
+                      <div className="feedback-officer-head">
+                        <span className="officer-role-label">Accepting Officer</span>
+                      </div>
+                      <div className="feedback-body">
+                        <div className="feedback-rating-badge">
+                          {goal.aoRating ? (
+                            <span className="rating-value">{goal.aoRating} <small>/ 5</small></span>
+                          ) : (
+                            <span className="rating-pending">Not rated</span>
+                          )}
+                        </div>
+                        <div className="feedback-remarks">
+                          {goal.aoRemarks || "No remarks provided."}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -920,40 +950,75 @@ const Reviews = () => {
       )}
 
       {activeRole === ROLES.EMPLOYEE && (isAnnualPeriodActive || hasPersistedSelfSummary) && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Self Appraisal</h2>
-            <span className="muted">Submit your annual self-appraisal</span>
+        <div className={isSelfAppraisalLocked ? "result-card" : "card"}>
+          <div className={isSelfAppraisalLocked ? "result-card-header" : "card-header"}>
+            {isSelfAppraisalLocked ? (
+              <>
+                <div className="result-card-index">SUMMARY</div>
+                <h3 className="result-card-title">Performance Year {selfForm.year}</h3>
+              </>
+            ) : (
+              <>
+                <h2>Self Appraisal</h2>
+                <span className="muted">Submit your annual self-appraisal</span>
+              </>
+            )}
           </div>
-          <div className="form-grid">
-            <div className="form-row">
-              <div style={{ maxWidth: 180 }}>
-                <label>Performance Year</label>
-                <input
-                  type="number"
-                  value={selfForm.year}
-                  disabled={isSelfAppraisalLocked || !isAnnualPeriodActive}
-                  onChange={(e) => setSelfForm({ ...selfForm, year: Number(e.target.value) })}
-                />
+          
+          <div className={isSelfAppraisalLocked ? "result-card-content" : "form-grid"}>
+            {!isSelfAppraisalLocked ? (
+              // EDITING MODE
+              <>
+                <div className="form-row">
+                  <div style={{ maxWidth: 180 }}>
+                    <label>Performance Year</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
+                      value={selfForm.year}
+                      disabled={!isAnnualPeriodActive}
+                      onChange={(e) => setSelfForm({ ...selfForm, year: Number(e.target.value) })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label>Self Summary</label>
+                  <textarea
+                    rows={5}
+                    className="achievement-textarea"
+                    value={selfForm.selfSummary}
+                    disabled={!isAnnualPeriodActive}
+                    onChange={(e) => setSelfForm({ ...selfForm, selfSummary: e.target.value })}
+                    placeholder="Enter your comprehensive self-summary statement here..."
+                  />
+                </div>
+                {error && <div className="error-text">{error}</div>}
+                <div className="action-row">
+                  <button className="btn" type="button" disabled={!isAnnualPeriodActive || !String(selfForm.selfSummary || "").trim()} onClick={submitSelfSummary}>
+                    Submit Summary
+                  </button>
+                </div>
+                {!isAnnualPeriodActive && (
+                  <div className="muted">Annual appraisal period is not active.</div>
+                )}
+                {isAnnualPeriodActive && !String(selfForm.selfSummary || "").trim() && (
+                  <div className="muted">Enter self summary to enable submission.</div>
+                )}
+              </>
+            ) : (
+              // VIEW MODE (Post-submission)
+              <div className="achievement-highlight-box" style={{ margin: 0 }}>
+                <div className="result-ref-title" style={{ marginBottom: "12px", textAlign: "center" }}>Submitted Self-Appraisal Statement</div>
+                <p className="achievement-text">
+                  {selfForm.selfSummary || "No summary statement provided."}
+                </p>
+                <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end" }}>
+                  <div className="status-badge-pill status-badge-blue">
+                    ✓ Submitted
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <label>Self Summary</label>
-              <textarea
-                rows={5}
-                value={selfForm.selfSummary}
-                disabled={isSelfAppraisalLocked || !isAnnualPeriodActive}
-                onChange={(e) => setSelfForm({ ...selfForm, selfSummary: e.target.value })}
-              />
-            </div>
-            {error && <div className="error-text">{error}</div>}
-            <div className="action-row">
-              <button className="btn" type="button" disabled={isSelfAppraisalLocked || !isAnnualPeriodActive || !String(selfForm.selfSummary || "").trim()} onClick={submitSelfSummary}>
-                {isSelfAppraisalLocked ? "Submitted" : "Submit Summary"}
-              </button>
-            </div>
-            {!isSelfAppraisalLocked && !String(selfForm.selfSummary || "").trim() && (
-              <div className="muted">Enter self summary to enable submission.</div>
             )}
           </div>
         </div>

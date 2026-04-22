@@ -16,7 +16,6 @@ const pageTitles = {
   "/admin/users/create": "Create user",
   "/admin/departments": "Departments",
   "/admin/analytics": "Analytics",
-  "/admin/audit": "Audit log",
   "/admin/create-user": "Create user",
   "/admin/all-users": "All Users",
   "/admin/hierarchy": "Reporting Hierarchy",

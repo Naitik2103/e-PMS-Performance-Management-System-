@@ -28,7 +28,6 @@ export const adminNavItems = Object.freeze([
   { label: "User management", path: "/admin/users", key: "um", icon: Users },
   { label: "Departments", path: "/admin/departments", key: "dd", icon: Building2 },
   { label: "Analytics", path: "/admin/analytics", key: "an", icon: BarChart2 },
-  { label: "Audit log", path: "/admin/audit", key: "al", icon: FileText },
 ]);
 
 export const appRoutes = Object.freeze([
@@ -50,7 +49,6 @@ export const appRoutes = Object.freeze([
   { path: "/admin/users/create", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/departments", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/analytics", layout: true, roles: [ROLES.HR_ADMIN] },
-  { path: "/admin/audit", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/all-users", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/hierarchy", layout: true, roles: [ROLES.HR_ADMIN] },
   { path: "/admin/create-user", layout: true, roles: [ROLES.HR_ADMIN] },

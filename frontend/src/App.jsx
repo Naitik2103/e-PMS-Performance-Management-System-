@@ -45,7 +45,6 @@ const App = () => {
     "/admin/users/create": <CreateNewUserPage />,
     "/admin/departments": <DepartmentsPage />,
     "/admin/analytics": <AnalyticsDashboard />,
-    "/admin/audit": <AdminPlaceholderPage title="Audit log" description="View administrative actions across the system." />,
     "/admin/all-users": <AllUsersPage />,
     "/admin/hierarchy": <ReportingHierarchyPage />,
     "/admin/create-user": <Navigate to="/admin/users/create" replace />
