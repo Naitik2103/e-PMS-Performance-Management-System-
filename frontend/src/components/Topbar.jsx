@@ -14,7 +14,7 @@ const pageTitles = {
   "/admin/cycles": "Appraisal cycles",
   "/admin/users": "User management",
   "/admin/users/create": "Create user",
-  "/admin/departments": "Departments & Designations",
+  "/admin/departments": "Departments",
   "/admin/analytics": "Analytics",
   "/admin/audit": "Audit log",
   "/admin/create-user": "Create user",

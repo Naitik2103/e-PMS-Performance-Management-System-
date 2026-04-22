@@ -26,7 +26,7 @@ export const roleHomePath = (role) => (role === ROLES.HR_ADMIN ? "/admin/cycles"
 export const adminNavItems = Object.freeze([
   { label: "Appraisal cycles", path: "/admin/cycles", key: "ac", icon: CalendarDays },
   { label: "User management", path: "/admin/users", key: "um", icon: Users },
-  { label: "Departments & Designations", path: "/admin/departments", key: "dd", icon: Building2 },
+  { label: "Departments", path: "/admin/departments", key: "dd", icon: Building2 },
   { label: "Analytics", path: "/admin/analytics", key: "an", icon: BarChart2 },
   { label: "Audit log", path: "/admin/audit", key: "al", icon: FileText },
 ]);

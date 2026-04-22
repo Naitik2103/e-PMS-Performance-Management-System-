@@ -15,6 +15,7 @@ import AdminCyclesPage from "./pages/admin/AdminCyclesPage";
 import ManageParticipantsPage from "./pages/admin/ManageParticipantsPage";
 import AdminUsersHubPage from "./pages/admin/AdminUsersHubPage";
 import AdminPlaceholderPage from "./pages/admin/AdminPlaceholderPage";
+import DepartmentsPage from "./pages/admin/DepartmentsPage";
 import AllUsersPage from "./pages/admin/AllUsersPage";
 import ReportingHierarchyPage from "./pages/admin/ReportingHierarchyPage";
 import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard";
@@ -42,9 +43,7 @@ const App = () => {
     "/admin/cycles": <AdminCyclesPage />,
     "/admin/users": <AdminUsersHubPage />,
     "/admin/users/create": <CreateNewUserPage />,
-    "/admin/departments": (
-      <AdminPlaceholderPage title="Departments & Designations" description="Manage department and designation master data." />
-    ),
+    "/admin/departments": <DepartmentsPage />,
     "/admin/analytics": <AnalyticsDashboard />,
     "/admin/audit": <AdminPlaceholderPage title="Audit log" description="View administrative actions across the system." />,
     "/admin/all-users": <AllUsersPage />,

@@ -66,7 +66,17 @@ const getAllUsersForDropdowns = async (req, res, next) => {
 const getDepartmentsAndDesignations = async (req, res, next) => {
   try {
     const [deptRes, desRes] = await Promise.all([
-      pool.query(`SELECT id, name, code FROM departments ORDER BY name`),
+      pool.query(`
+        SELECT 
+          d.id, 
+          d.name, 
+          d.code, 
+          COUNT(u.user_id)::int AS "employeeCount"
+        FROM departments d
+        LEFT JOIN users u ON u.department_id = d.id AND u.is_active = true
+        GROUP BY d.id, d.name, d.code
+        ORDER BY d.name
+      `),
       pool.query(`SELECT id, title, grade_level AS "gradeLevel" FROM designations ORDER BY title`)
     ]);
     return res.json({
