@@ -10,7 +10,7 @@ const Goals = () => {
   const { user, activeCycle } = useAuth();
   const location = useLocation();
   const [goals, setGoals] = useState([]);
-  const [form, setForm] = useState({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
+  const [form, setForm] = useState({ year: activeCycle?.year || new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState("");
   const [focusedGoalId, setFocusedGoalId] = useState("");
@@ -168,7 +168,7 @@ const Goals = () => {
         await apiClient.post("/goals", payload);
       }
       setEditingId(null);
-      setForm({ year: new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
+      setForm({ year: activeCycle?.year || new Date().getFullYear(), goalTitle: "", goalDescription: "", weightage: "" });
       loadGoals();
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || "Unable to save goal");

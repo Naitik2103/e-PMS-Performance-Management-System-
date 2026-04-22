@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../constants/rbac";
-import { isSixMonthReviewPeriodActive, formatDateDisplay } from "../utils/periodVisibility";
+import { isSixMonthReviewPeriodActive, isSixMonthReviewPeriodClosed, formatDateDisplay } from "../utils/periodVisibility";
 
 const Tracking = () => {
   const { user, activeCycle } = useAuth();
@@ -12,9 +12,19 @@ const Tracking = () => {
   const [error, setError] = useState("");
   const [remarks, setRemarks] = useState({});
   const [isSixMonthPeriodActive, setIsSixMonthPeriodActive] = useState(false);
+  const [isSixMonthPeriodClosed, setIsSixMonthPeriodClosed] = useState(false);
 
   useEffect(() => {
     setIsSixMonthPeriodActive(isSixMonthReviewPeriodActive(activeCycle));
+    setIsSixMonthPeriodClosed(isSixMonthReviewPeriodClosed(activeCycle));
+
+    // Debug logging for Time Travel testing
+    if (activeCycle) {
+      console.log("🔍 [Time Travel Debug] Tracking Page");
+      console.log("   Server 'Today':", activeCycle.serverDate || "Browser Default");
+      console.log("   Period End   :", activeCycle.sixMonthProgressReviewEnd);
+      console.log("   Is Closed?   :", isSixMonthReviewPeriodClosed(activeCycle));
+    }
   }, [activeCycle]);
 
   const activeCycleId = activeCycle?.cycleId || activeCycle?.id || null;
@@ -194,11 +204,11 @@ const Tracking = () => {
               <th>Status</th>
               <th>Progress</th>
               <th>RO Remarks</th>
-              <th>Actions</th>
+              {!isSixMonthPeriodClosed && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {tracking.length === 0 && <tr><td colSpan={6} className="table-empty">No tracking records found.</td></tr>}
+            {tracking.length === 0 && <tr><td colSpan={isSixMonthPeriodClosed ? 5 : 6} className="table-empty">No tracking records found.</td></tr>}
             {tracking.map((record) => (
               <tr key={record.id}>
                 <td>{record.employee?.name || "Self"}</td>
@@ -217,18 +227,20 @@ const Tracking = () => {
                 </td>
                 <td>{record.progressText}</td>
                 <td>{record.roRemarks || record.reportingRemarks || <span className="muted">-</span>}</td>
-                <td>
-                  {user?.role === ROLES.REPORTING_OFFICER && record.status === "submitted" && (
-                    <div className="inline-form-short">
-                      <input
-                        placeholder="Add remarks..."
-                        value={remarks[record.id] || ""}
-                        onChange={(e) => setRemarks((prev) => ({ ...prev, [record.id]: e.target.value }))}
-                      />
-                      <button className="btn" type="button" onClick={() => submitRemarks(record.id)}>Submit</button>
-                    </div>
-                  )}
-                </td>
+                {!isSixMonthPeriodClosed && (
+                  <td>
+                    {user?.role === ROLES.REPORTING_OFFICER && record.status === "submitted" && (
+                      <div className="inline-form-short">
+                        <input
+                          placeholder="Add remarks..."
+                          value={remarks[record.id] || ""}
+                          onChange={(e) => setRemarks((prev) => ({ ...prev, [record.id]: e.target.value }))}
+                        />
+                        <button className="btn" type="button" onClick={() => submitRemarks(record.id)}>Submit</button>
+                      </div>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

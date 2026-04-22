@@ -10,7 +10,7 @@ const Reviews = () => {
   const { user, activeCycle } = useAuth();
   const location = useLocation();
   const [reviews, setReviews] = useState([]);
-  const [selfForm, setSelfForm] = useState({ year: new Date().getFullYear(), selfSummary: "" });
+  const [selfForm, setSelfForm] = useState({ year: activeCycle?.year || new Date().getFullYear(), selfSummary: "" });
   const [ratingInputs, setRatingInputs] = useState({});
   const [remarkInputs, setRemarkInputs] = useState({});
   const [error, setError] = useState("");
@@ -442,7 +442,7 @@ const Reviews = () => {
         ...selfForm,
         cycleId: activeCycleId || undefined
       });
-      setSelfForm({ year: new Date().getFullYear(), selfSummary: "" });
+      setSelfForm({ year: activeCycle?.year || new Date().getFullYear(), selfSummary: "" });
       loadReviews();
       loadYearEndGoals();
     } catch (err) {
