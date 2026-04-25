@@ -32,6 +32,9 @@ const ensureAdminSchema = async (pool) => {
   await pool.query(
     `CREATE UNIQUE INDEX IF NOT EXISTS users_employee_id_unique ON users(employee_id) WHERE employee_id IS NOT NULL AND employee_id <> ''`
   );
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS users_phone_unique ON users(phone) WHERE phone IS NOT NULL AND phone <> ''`
+  );
 
   await pool.query(`ALTER TABLE appraisal_cycles ADD COLUMN IF NOT EXISTS status text`);
   await pool.query(`ALTER TABLE appraisal_cycles ADD COLUMN IF NOT EXISTS financial_year text`);

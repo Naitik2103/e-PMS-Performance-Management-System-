@@ -22,10 +22,12 @@ const createUserValidation = [
   body("firstName")
     .trim()
     .notEmpty().withMessage("First name is required")
+    .isLength({ min: 3 }).withMessage("First name must be at least 3 characters")
     .matches(namePattern).withMessage("First name must contain letters only"),
   body("lastName")
     .trim()
     .notEmpty().withMessage("Last name is required")
+    .isLength({ min: 3 }).withMessage("Last name must be at least 3 characters")
     .matches(namePattern).withMessage("Last name must contain letters only"),
   body("email").isEmail().withMessage("Valid email is required"),
   body("phone")

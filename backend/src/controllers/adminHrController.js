@@ -126,6 +126,17 @@ const createHrUser = async (req, res, next) => {
       return res.status(409).json({ field: "email", error: "This email already exists in the system" });
     }
 
+    const phoneVal = phone ? String(phone).trim() : null;
+    if (phoneVal) {
+      if (phoneVal.length !== 10) {
+        return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
+      }
+      const existingPhone = await pool.query(`SELECT user_id FROM users WHERE phone = $1 LIMIT 1`, [phoneVal]);
+      if (existingPhone.rows.length) {
+        return res.status(409).json({ field: "phone", error: "This phone number already exists in the system" });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(String(temporaryPassword), 10);
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(emailValue)) {
@@ -133,11 +144,6 @@ const createHrUser = async (req, res, next) => {
       return next(new Error("Invalid email format"));
     }
     const normalizedRole = normalizeRole(role);
-
-    const phoneVal = phone ? String(phone).trim() : null;
-    if (phoneVal && phoneVal.length !== 10) {
-      return res.status(400).json({ error: "Phone number must be exactly 10 digits" });
-    }
     const reportingToId = reportingTo || null;
 
     const returning = `

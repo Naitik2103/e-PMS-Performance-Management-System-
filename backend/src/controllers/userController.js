@@ -38,6 +38,14 @@ const createUser = async (req, res, next) => {
       return next(new Error("User with this email already exists"));
     }
 
+    if (phoneValue) {
+      const phoneExists = await pool.query("SELECT 1 FROM users WHERE phone = $1 LIMIT 1", [phoneValue]);
+      if (phoneExists.rows.length) {
+        res.status(409);
+        return next(new Error("User with this phone number already exists"));
+      }
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const departmentId = await ensureDepartmentId(department);
     const normalizedRole = normalizeRole(role || ROLES.EMPLOYEE);
@@ -173,9 +181,21 @@ const updateUser = async (req, res, next) => {
     const firstName = req.body.firstName !== undefined ? req.body.firstName : existing.rows[0].first_name;
     const lastName = req.body.lastName !== undefined ? req.body.lastName : existing.rows[0].last_name;
     const phone = req.body.phone !== undefined ? req.body.phone : existing.rows[0].phone;
-    if (req.body.phone && String(req.body.phone).trim().length !== 10) {
-      res.status(400);
-      return next(new Error("Phone number must be exactly 10 digits"));
+    if (req.body.phone) {
+      const phoneVal = String(req.body.phone).trim();
+      if (phoneVal.length !== 10) {
+        res.status(400);
+        return next(new Error("Phone number must be exactly 10 digits"));
+      }
+      
+      const phoneExists = await pool.query(
+        "SELECT 1 FROM users WHERE phone = $1 AND user_id <> $2 LIMIT 1",
+        [phoneVal, id]
+      );
+      if (phoneExists.rows.length) {
+        res.status(409);
+        return next(new Error("This phone number is already taken by another user"));
+      }
     }
 
     const updated = await pool.query(

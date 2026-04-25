@@ -21,7 +21,9 @@ const namePattern = /^\p{L}+$/u;
 const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const phonePattern = /^\d{10}$/;
 const strongPasswordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])(?!.*\s).{8,15}$/;
+const MIN_NAME_LENGTH = 3;
 const isValidName = (value) => namePattern.test(String(value || "").trim());
+const isValidNameLength = (value) => String(value || "").trim().length >= MIN_NAME_LENGTH;
 const isValidEmail = (value) => emailPattern.test(String(value || "").trim());
 const isValidPhone = (value) => {
   const trimmed = String(value || "").trim();
@@ -98,6 +100,8 @@ const CreateNewUserPage = () => {
       const next = { ...prev };
       if (!trimmed) {
         next[field] = "Required";
+      } else if (!isValidNameLength(trimmed)) {
+        next[field] = `Minimum ${MIN_NAME_LENGTH} characters required`;
       } else if (!isValidName(trimmed)) {
         next[field] = "Only letters are allowed";
       } else {
@@ -211,8 +215,11 @@ const CreateNewUserPage = () => {
   const validate = () => {
     const err = {};
     if (!form.firstName.trim()) err.firstName = "Required";
+    else if (!isValidNameLength(form.firstName)) err.firstName = `Minimum ${MIN_NAME_LENGTH} characters required`;
     else if (!isValidName(form.firstName)) err.firstName = "Only letters are allowed";
+
     if (!form.lastName.trim()) err.lastName = "Required";
+    else if (!isValidNameLength(form.lastName)) err.lastName = `Minimum ${MIN_NAME_LENGTH} characters required`;
     else if (!isValidName(form.lastName)) err.lastName = "Only letters are allowed";
     if (!form.email.trim()) err.email = "Required";
     else if (!isValidEmail(form.email)) err.email = "Enter a valid email address";

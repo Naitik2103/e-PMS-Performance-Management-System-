@@ -49,6 +49,14 @@ const AllUsersPage = () => {
     setSuccess("");
     setFormError("");
     
+    if (!editForm.firstName.trim() || editForm.firstName.trim().length < 3) {
+      setFormError("First name must be at least 3 characters");
+      return;
+    }
+    if (!editForm.lastName.trim() || editForm.lastName.trim().length < 3) {
+      setFormError("Last name must be at least 3 characters");
+      return;
+    }
     if (editForm.phone && editForm.phone.length !== 10) {
       setFormError("Phone number must be exactly 10 digits");
       return;
