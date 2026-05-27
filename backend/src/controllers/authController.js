@@ -7,6 +7,7 @@ import { OTP_PURPOSES, createOtpForUser, verifyOtpForUser, consumeOtp } from "..
 import { sendOtpEmail } from "../services/emailService.js";
 import { getCycleAccess } from "../services/cycleAccess.js";
 import { sendEmail, forgotPasswordMailgenContent } from "../services/mail.js";
+import { getPublicAppUrl } from "../utils/publicUrl.js";
 
 const tokenTtlMs = Number(process.env.JWT_EXPIRES_MS || 8 * 60 * 60 * 1000);
 const preAuthTtlSec = Number(process.env.PREAUTH_EXPIRES_IN_SECONDS || 5 * 60);
@@ -672,9 +673,7 @@ const forgotPasswordRequest = async (req, res, next) => {
       [user.user_id, tokenHash, expiresAt]
     );
 
-    // Create Reset URL
-    // Assuming frontend runs on localhost:3000 during dev, but typically should use process.env.FRONTEND_URL
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = getPublicAppUrl();
     const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
 
     const userName = user.first_name ? `${user.first_name} ${user.last_name || ""}`.trim() : "User";

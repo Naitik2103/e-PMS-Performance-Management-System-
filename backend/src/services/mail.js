@@ -1,5 +1,6 @@
 import Mailgen from "mailgen";
 import nodemailer from "nodemailer";
+import { getPublicAppUrl } from "../utils/publicUrl.js";
 //we can use mailgen package to generate the email content for the email verification and forgot password emails. Mailgen is a simple and easy to use package that allows us to generate beautiful and responsive email templates. We can customize the email templates as per our requirement. We can also use our own custom email templates if we want to. Mailgen provides a lot of options to customize the email templates. We can also use the default email templates provided by Mailgen if we want to. 
 //we can also create a separate file for the email templates and import the email templates in the controllers where we want to send the emails. This way, we can keep our code organized and modular. We can also use the email templates in other parts of our application if we want to. For example, we can use the email templates in the notification system of our application to send notifications to the users.
 
@@ -24,7 +25,7 @@ const sendEmail = async (options) => {
             name: "e-Perfromance Management System",
             // link: "http://localhost:${process.env.PORT || 3000}"
             // link: "lwjdnjvcls"
-            link: process.env.APP_URL || "http://localhost:3000"
+            link: getPublicAppUrl()
         }
     })
 

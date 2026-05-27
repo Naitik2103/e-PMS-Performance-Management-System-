@@ -36,7 +36,8 @@ const unreadCount = async (req, res, next) => {
       [userId]
     );
     return res.json({ count: rows[0]?.count ?? 0 });
-  } catch (error) {
+  } 
+  catch (error) {
     return next(error);
   }
 };
